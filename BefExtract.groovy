@@ -17,17 +17,36 @@ if(rule == "BANK_LOAD") {
     locationPath = "/data/ar/dev/inbox/bank/"
     filePath = ""
     fileName = ""
-    new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("tdnb#")){
-            path = file.getAbsolutePath()
+
+    // Ensure the folder exists
+    def folder = new File(locationPath)
+    if (!folder.exists()) {
+        println "Directory not found: " + locationPath
+        return // Exit script if directory does not exist
+    } else {
+        println "Directory found: " + locationPath
+    }
+
+    folder.eachFile() {
+         file -> if(file.getName().contains("tdnb")){
+             filePath = file.getAbsolutePath()
+             fileName = file.getName()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
             // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+             fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+             println "Selected file name: " + fileName
+             println "Selected file: " + filePath
+             println "Selected file from substring: " + fileNameFromPath
+             println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
          }
       }
+
+    // Check if a valid file was found
+    if (filePath == "") {
+        println "No matching file found with 'tdnb' in its name."
+        return // Exit the script if no file is found
+    }
 
     // read in lines from file
     def fileContents = new File(filePath).readLines()
@@ -61,7 +80,7 @@ if(rule == "BANK_LOAD") {
     }
     
     edit1 = edit.split('\n').drop(1).join('\n')
-    def myFile = new File('/data/ar/dev/data/tmp/mySuperFile.txt')
+    def myFile = new File('/data/ar/dev/data/mySuperFile.txt')
     myFile.write(edit1)
     editContents = myFile.readLines()
     numLinesEdit = editContents.size()
@@ -116,7 +135,7 @@ if(rule == "BANK_LOAD") {
         }
     }
 
-    def myFile1 = new File('/data/ar/dev/data/tmp/ARCSInput.txt')
+    def myFile1 = new File('/data/ar/dev/data/ARCSInput.txt')
     myFile1.write(finalData.split('\n').drop(1).join('\n'))
 
     String arcsData
@@ -135,7 +154,7 @@ if(rule == "BANK_LOAD") {
             outputData = outputData + '\n' + a
         
     }
-    def myFile2 = new File('/data/ar/dev/data/tmp/ARCSInput2.txt')
+    def myFile2 = new File('/data/ar/dev/data/ARCSInput2.txt')
     myFile2.write(outputData/*.split('\n').drop(2).join('\n')*/)
     
     myFile.delete()
