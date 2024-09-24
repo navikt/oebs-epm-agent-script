@@ -33,7 +33,7 @@ if(rule == "BANK_LOAD") {
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Bank/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/bank/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -61,7 +61,7 @@ if(rule == "BANK_LOAD") {
     }
     
     edit1 = edit.split('\n').drop(1).join('\n')
-    def myFile = new File('C:\\EPMAgentDataNAV\\scripts\\mySuperFile1234.txt')
+    def myFile = new File('/data/ar/dev/data/tmp/mySuperFile.txt')
     myFile.write(edit1)
     editContents = myFile.readLines()
     numLinesEdit = editContents.size()
@@ -116,7 +116,7 @@ if(rule == "BANK_LOAD") {
         }
     }
 
-    def myFile1 = new File('ARCSInput.txt')
+    def myFile1 = new File('/data/ar/dev/data/tmp/ARCSInput.txt')
     myFile1.write(finalData.split('\n').drop(1).join('\n'))
 
     String arcsData
@@ -135,7 +135,7 @@ if(rule == "BANK_LOAD") {
             outputData = outputData + '\n' + a
         
     }
-    def myFile2 = new File('ARCSInput2.txt')
+    def myFile2 = new File('/data/ar/dev/data/tmp/ARCSInput2.txt')
     myFile2.write(outputData/*.split('\n').drop(2).join('\n')*/)
     
     myFile.delete()
