@@ -172,14 +172,17 @@ else if(rule == "OEBS_BANK_LOAD"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("GL2BETTY")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+         file -> if(file.getName().contains("GL2BETTY")){
+             filePath = file.getAbsolutePath()
+             fileName = file.getName()
+             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
+             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
+             // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
+             fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+             println "Selected file name: " + fileName
+             println "Selected file: " + filePath
+             println "Selected file from substring: " + fileNameFromPath
+             println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
          }
       }
 
