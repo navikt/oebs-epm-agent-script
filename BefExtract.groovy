@@ -257,51 +257,24 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     // delete file in src
     src.delete()    
     
-    // output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
-    // for(line in fileContents) {
-    //     def type_pos_1 = line.indexOf(";")
-    //     type_str = line.substring(0,type_pos_1)
-    //     if(type_str == '"BESTILLING') {
-    //         def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-    //         def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-    //         datestr = line.substring(date_pos_1+1,date_pos_2)
-    //         date = new Date().parse("yyyy-MM-dd", datestr)
-    //         newdate = date.format("dd-MMM-yyyy")
-    //         line = line.replaceAll(datestr,newdate)
-    //         line = line.replaceAll('"',"")
-    //         output = output + '\n' + line + ";;"
-    //     }
-    // }
-    // outputFile.write(output)
-    output = "Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
-    for (line in fileContents) {
-        def fields = line.split(";")
-        def type_str = fields[0]
-    
-        if (type_str == '"BESTILLING') {
-            def datestr = fields[2]
-        
-            // Parse and reformat the date
-            try {
-                def date = Date.parse("yyyy-MM-dd", datestr)
-                def newdate = date.format("dd-MMM-yyyy")
-            
-                // Update the date in the fields array
-                fields[2] = newdate
-                } catch (Exception e) {
-                    println "Error parsing date: $datestr"
-                }
-        
-        // Rebuild the line and remove quotes
-        def newline = fields.collect { it.replace('"', "") }.join(";")
-        output += '\n' + newline + ";;"
+    output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
+    for(line in fileContents) {
+        def type_pos_1 = line.indexOf(";")
+        type_str = line.substring(0,type_pos_1)
+        if(type_str == '"BESTILLING') {
+            def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
+            def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
+            datestr = line.substring(date_pos_1+1,date_pos_2)
+            date = new Date().parse("yyyy-MM-dd", datestr)
+            newdate = date.format("dd-MMM-yyyy")
+            line = line.replaceAll(datestr,newdate)
+            line = line.replaceAll('"',"")
+            output = output + '\n' + line + ";;"
+        }
     }
+    outputFile.write(output)
 }
 
-// Write the final output to the file
-outputFile.write(output)
-
-}
 //TODO: LT-BESTILLING? 
 //4. This block of code loads the Tiltak Daglig Faktura file loading only lines with type FAKTURA
 else if(rule == "Tiltak_Daglig_Faktura") {
