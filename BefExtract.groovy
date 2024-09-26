@@ -231,16 +231,16 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("Tiltak_Daglig")){
-             filePath = file.getAbsolutePath()
-             fileName = file.getName()
-             fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
-             println "Selected file name: " + fileName
-             println "Selected file: " + filePath
-             println "Selected file from substring: " + fileNameFromPath
-             println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
+            filePath = file.getAbsolutePath()
+            fileName = file.getName()
+            //fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+            println "Selected file name: " + fileName
+            println "Selected file: " + filePath
+            println "Selected file from substring: " + fileNameFromPath
+            //println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
 
-         }
-      }
+        }
+    }
 
     // read in lines from file
     def fileContents = new File(filePath).readLines()
@@ -286,13 +286,13 @@ else if(rule == "Tiltak_Daglig_Faktura") {
          file -> if(file.getName().contains("Tiltaksfaktura_Daglig")){
             filePath = file.getAbsolutePath()
             fileName = file.getName()
-            fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+            //fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
             println "Selected file name: " + fileName
             println "Selected file: " + filePath
             println "Selected file from substring: " + fileNameFromPath
-            println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
+            //println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
         }
-      }
+    }
 
     // read in lines from file
     def fileContents = new File(filePath).readLines()
