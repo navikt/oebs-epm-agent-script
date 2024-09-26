@@ -261,7 +261,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     for(line in fileContents) {
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
-        if(type_str == '"BESTILLING') {
+        if(type_str == 'BESTILLING') {
             def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
             def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
             datestr = line.substring(date_pos_1+1,date_pos_2)
@@ -275,20 +275,23 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     outputFile.write(output)
 }
 
-//TODO: LT-BESTILLING? 
+
 //4. This block of code loads the Tiltak Daglig Faktura file loading only lines with type FAKTURA
 else if(rule == "Tiltak_Daglig_Faktura") {
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("TILTAK_DAGLIG")){
-            path = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
+         file -> if(file.getName().contains("Tiltaksfaktura_Daglig")){
+            filePath = file.getAbsolutePath()
+            fileName = file.getName()
+            fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+            println "Selected file name: " + fileName
+            println "Selected file: " + filePath
+            println "Selected file from substring: " + fileNameFromPath
+            println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
+        }
       }
 
     // read in lines from file
@@ -310,7 +313,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
     for(line in fileContents) {
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
-        if(type_str == '"FAKTURA') {
+        if(type_str == 'FAKTURA') {
             def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
             def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
             datestr = line.substring(date_pos_1+1,date_pos_2)
