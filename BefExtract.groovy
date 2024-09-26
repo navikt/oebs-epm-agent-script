@@ -226,18 +226,19 @@ else if(rule == "OEBS_BANK_LOAD"){
 // 3. this block of code loads the tiltak daglig file with only lines of type BESTTILLING
 else if(rule == "Tiltak_Daglig_Bestilling") {
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("Tiltak_Daglig")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+         file -> if(file.getName().contains("Tiltak_Daglig")){
+             filePath = file.getAbsolutePath()
+             fileName = file.getName()
+             fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+             println "Selected file name: " + fileName
+             println "Selected file: " + filePath
+             println "Selected file from substring: " + fileNameFromPath
+             println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
+
          }
       }
 
@@ -273,6 +274,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     }
     outputFile.write(output)
 }
+
 //TODO: LT-BESTILLING? 
 //4. This block of code loads the Tiltak Daglig Faktura file loading only lines with type FAKTURA
 else if(rule == "Tiltak_Daglig_Faktura") {
@@ -281,7 +283,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("TILTAK_DAGLIG")){
+         file -> if(file.getName().contains("TILTAK_DAGLIG")){
             path = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
