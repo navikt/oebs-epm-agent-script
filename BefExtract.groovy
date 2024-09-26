@@ -236,7 +236,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
             //fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
             println "Selected file name: " + fileName
             println "Selected file: " + filePath
-            println "Selected file from substring: " + fileNameFromPath
+            //println "Selected file from substring: " + fileNameFromPath
             //println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
 
         }
@@ -289,7 +289,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
             //fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
             println "Selected file name: " + fileName
             println "Selected file: " + filePath
-            println "Selected file from substring: " + fileNameFromPath
+            //println "Selected file from substring: " + fileNameFromPath
             //println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
         }
     }
