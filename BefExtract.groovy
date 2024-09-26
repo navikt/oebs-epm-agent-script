@@ -172,14 +172,17 @@ else if(rule == "OEBS_BANK_LOAD"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("GL2BETTY")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+         file -> if(file.getName().contains("GL2BETTY")){
+             filePath = file.getAbsolutePath()
+             fileName = file.getName()
+             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
+             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
+             // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
+             fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+             println "Selected file name: " + fileName
+             println "Selected file: " + filePath
+             println "Selected file from substring: " + fileNameFromPath
+             println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
          }
       }
 
@@ -187,7 +190,7 @@ else if(rule == "OEBS_BANK_LOAD"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/OracleGL/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/OracleGL/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -220,10 +223,10 @@ else if(rule == "OEBS_BANK_LOAD"){
      outputFile.write(output)
 }
 
-// 3. this bloack of code loads the tiltak daglig file with only lines of type BESTTILLING
+// 3. this block of code loads the tiltak daglig file with only lines of type BESTTILLING
 else if(rule == "Tiltak_Daglig_Bestilling") {
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/Tiltak_Daglig"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -242,7 +245,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Tiltak_Daglig/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -270,19 +273,16 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     }
     outputFile.write(output)
 }
-
+//TODO: LT-BESTILLING? 
 //4. This block of code loads the Tiltak Daglig Faktura file loading only lines with type FAKTURA
 else if(rule == "Tiltak_Daglig_Faktura") {
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/Tiltaksfaktura_daglig"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("Tiltaksfaktura")){
+         file -> if(file.getAbsolutePath().contains("TILTAK_DAGLIG")){
             path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -293,7 +293,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Tiltaksfaktura_daglig/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
