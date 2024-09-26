@@ -226,18 +226,19 @@ else if(rule == "OEBS_BANK_LOAD"){
 // 3. this block of code loads the tiltak daglig file with only lines of type BESTTILLING
 else if(rule == "Tiltak_Daglig_Bestilling") {
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("Tiltak_Daglig")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+         file -> if(file.getName().contains("Tiltak_Daglig")){
+             filePath = file.getAbsolutePath()
+             fileName = file.getName()
+             fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+             println "Selected file name: " + fileName
+             println "Selected file: " + filePath
+             println "Selected file from substring: " + fileNameFromPath
+             println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
+
          }
       }
 
@@ -256,22 +257,50 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     // delete file in src
     src.delete()    
     
-    output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
-    for(line in fileContents) {
-        def type_pos_1 = line.indexOf(";")
-        type_str = line.substring(0,type_pos_1)
-        if(type_str == '"BESTILLING') {
-            def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-            def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            datestr = line.substring(date_pos_1+1,date_pos_2)
-            date = new Date().parse("yyyy-MM-dd", datestr)
-            newdate = date.format("dd-MMM-yyyy")
-            line = line.replaceAll(datestr,newdate)
-            line = line.replaceAll('"',"")
-            output = output + '\n' + line + ";;"
-        }
+    // output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
+    // for(line in fileContents) {
+    //     def type_pos_1 = line.indexOf(";")
+    //     type_str = line.substring(0,type_pos_1)
+    //     if(type_str == '"BESTILLING') {
+    //         def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
+    //         def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
+    //         datestr = line.substring(date_pos_1+1,date_pos_2)
+    //         date = new Date().parse("yyyy-MM-dd", datestr)
+    //         newdate = date.format("dd-MMM-yyyy")
+    //         line = line.replaceAll(datestr,newdate)
+    //         line = line.replaceAll('"',"")
+    //         output = output + '\n' + line + ";;"
+    //     }
+    // }
+    // outputFile.write(output)
+    output = "Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
+    for (line in fileContents) {
+        def fields = line.split(";")
+        def type_str = fields[0]
+    
+        if (type_str == '"BESTILLING') {
+            def datestr = fields[2]
+        
+            // Parse and reformat the date
+            try {
+                def date = Date.parse("yyyy-MM-dd", datestr)
+                def newdate = date.format("dd-MMM-yyyy")
+            
+                // Update the date in the fields array
+                fields[2] = newdate
+                } catch (Exception e) {
+                    println "Error parsing date: $datestr"
+                }
+        
+        // Rebuild the line and remove quotes
+        def newline = fields.collect { it.replace('"', "") }.join(";")
+        output += '\n' + newline + ";;"
     }
-    outputFile.write(output)
+}
+
+// Write the final output to the file
+outputFile.write(output)
+
 }
 //TODO: LT-BESTILLING? 
 //4. This block of code loads the Tiltak Daglig Faktura file loading only lines with type FAKTURA
@@ -281,7 +310,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("TILTAK_DAGLIG")){
+         file -> if(file.getName().contains("TILTAK_DAGLIG")){
             path = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
