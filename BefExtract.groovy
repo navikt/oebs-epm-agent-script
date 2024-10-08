@@ -1,6 +1,9 @@
 import groovy.json.* 
 import groovy.xml.*
 import java.util.zip.*
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.text.ParseException
 
 // Turn off SQL Processing by Agent 
 agentAPI.skipAction('true')
@@ -209,6 +212,8 @@ else if(rule == "OEBS_BANK_LOAD"){
         def deb_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
         def cred_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
         def cred_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1)
+        def date_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1)
+        def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1) + 1)
         def debit 
         if(line.substring(deb_pos_1+1,deb_pos_2) == ""){
             debit = 0
@@ -217,7 +222,22 @@ else if(rule == "OEBS_BANK_LOAD"){
         if(line.substring(cred_pos_1+1,cred_pos_2) == ""){
             credit = 0
         }else{credit = Float.valueOf(line.substring(cred_pos_1+1,cred_pos_2))}
-        
+        // Extract and format the date
+        def datestr = line.substring(date_pos_1 + 1, date_pos_2).trim()
+        def norwegianDateFormat = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Parsing with Norwegian locale
+        def date
+        try {
+            date = norwegianDateFormat.parse(datestr)
+        } catch (ParseException e) {
+            println "Error parsing date: ${e.message}"
+            // Handle the error appropriately (e.g., set date to null or log it)
+        }
+
+        def sdf = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Formatting with English locale
+        def newdate = sdf.format(date)
+
+        // Replace the original date string with the newly formatted date in the line
+        line = line.replace(datestr, newdate)
         output = output + '\n' + line + ';' + (debit + credit).toString()
     }
      outputFile.write(output)
@@ -333,7 +353,7 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("LT_tiltak_avstemming_dag")){
+         file -> if(file.getName().contains("LT_tiltak_avstemming_dag")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -387,7 +407,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("LT_tiltak_avstemming_dag")){
+         file -> if(file.getName().contains("LT_tiltak_avstemming_dag")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -438,7 +458,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("tiltak_avstemming_dag")){
+         file -> if(file.getName().contains("tiltak_avstemming_dag")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -491,7 +511,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("tiltak_avstemming_dag")){
+         file -> if(file.getName().contains("tiltak_avstemming_dag")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -544,7 +564,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("tiltak_avstemming_dag")){
+         file -> if(file.getName().contains("tiltak_avstemming_dag")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -598,7 +618,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("tiltak_avstemming_dag")){
+         file -> if(file.getName().contains("tiltak_avstemming_dag")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -653,7 +673,7 @@ locationPath = "/data/ar/dev/inbox/Tiltak_maanedlig"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("Tiltak_Maanedlig")){
+         file -> if(file.getName().contains("Tiltak_Maanedlig")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -691,7 +711,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("tiltak_avstemming_mnd")){
+         file -> if(file.getName().contains("tiltak_avstemming_mnd")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -738,7 +758,7 @@ else if(rule == "Grensesnitt"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("OB04")){
+         file -> if(file.getName().contains("OB04")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -852,7 +872,7 @@ else if(rule == "Grensesnitt_fag"){
     src.delete()
 
     // define header row for the file
-    output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjøringTilIngenTilbakekreving"
+    output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjÃ¸ringTilIngenTilbakekreving"
     fileContents = fileContents.drop(1)
     for(line in fileContents) {
         def date_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
@@ -865,3 +885,4 @@ else if(rule == "Grensesnitt_fag"){
     }
     outputFile.write(output)
 }
+
