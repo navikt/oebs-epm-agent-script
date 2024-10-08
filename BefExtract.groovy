@@ -885,4 +885,3 @@ else if(rule == "Grensesnitt_fag"){
     }
     outputFile.write(output)
 }
-
