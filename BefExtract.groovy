@@ -773,7 +773,7 @@ else if(rule == "Grensesnitt"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/OB04/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/OB04/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
