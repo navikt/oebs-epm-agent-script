@@ -349,7 +349,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
 
 //5. This block of code loads the LT tiltak avstemming daglig file loading only rows with type LT-tilsagn and status of Godkjent
 else if(rule == "Tiltak_Tilsagn_Arena"){
-    locationPath = "/data/ar/dev/inbox/LT_tiltak_avstemming_dag"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -368,7 +368,7 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/LT_tiltak_avstemming_dag/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -403,7 +403,7 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
 //6. This code block loads the LT tiltak avstemming daglig file loading only rows with type LT-refusjon
 else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/LT_tiltak_avstemming_dag"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -422,7 +422,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/LT_tiltak_avstemming_dag/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -454,7 +454,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
 //7. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert 
 else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/Tiltak_avstemming_dag"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -473,7 +473,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Tiltak_avstemming_dag/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -507,7 +507,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
 
 //8. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Refusjonskrav 
 else if(rule == "Tiltak_RefKrav_Arena"){
-    locationPath = "/data/ar/dev/inbox/Tiltak_avstemming_dag"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -526,7 +526,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Tiltak_avstemming_dag/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -579,7 +579,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Tiltak_avstemming_dag/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak_avstemming_dag/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -614,7 +614,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
 // 10. This block of code loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert
 else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/Tiltak_avstemming_dag"
+    locationPath = "/data/ar/dev/inbox/tiltak_avstemming_dag"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -633,7 +633,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Tiltak_avstemming_dag/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak_avstemming_dag/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -669,7 +669,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
 // 11. This block of code loads data from the Tiltakl Maanedlig file
 else if(rule == "Tiltak_Manedlig"){
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-locationPath = "/data/ar/dev/inbox/Tiltak_maanedlig"
+locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -688,7 +688,7 @@ locationPath = "/data/ar/dev/inbox/Tiltak_maanedlig"
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Tiltak_maanedlig/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -707,7 +707,7 @@ locationPath = "/data/ar/dev/inbox/Tiltak_maanedlig"
 // 12. This block of code loads data from the Manedlig_OEBS file
 else if(rule == "Tiltak_Manedlig_OEBS"){
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/Tiltak_avstemming_mnd"
+    locationPath = "/data/ar/dev/inbox/tiltak/maanedlig"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -726,7 +726,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Tiltak_avstemming_mnd/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -845,7 +845,7 @@ else if(rule == "Grensesnitt_fag"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getAbsolutePath().contains("Fagsystem")){
+         file -> if(file.getName().contains("Fagsystem")){
             path = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
