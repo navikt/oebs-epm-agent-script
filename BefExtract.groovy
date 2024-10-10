@@ -754,7 +754,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
 else if(rule == "Grensesnitt"){
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
     // read in grensesnitt file contents and read each line as a string
-    locationPath = "/data/ar/dev/inbox/OB04"
+    locationPath = "/data/ar/dev/inbox/grensesnitt"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -773,7 +773,7 @@ else if(rule == "Grensesnitt"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/OB04/arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -838,10 +838,10 @@ else if(rule == "Grensesnitt"){
     outputFile.write(output)
 }
 
-//14. This block of code loads data from the Faysystem Grensesnitt file.
+//14. This block of code loads data from the Fagsystem Grensesnitt file.
 else if(rule == "Grensesnitt_fag"){
     // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    locationPath = "/data/ar/dev/inbox/Grensesnitt"
+    locationPath = "/data/ar/dev/inbox/grensesnitt"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -860,7 +860,7 @@ else if(rule == "Grensesnitt_fag"){
     def fileContents = new File(filePath).readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/Grensesnitt/Arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
