@@ -770,7 +770,7 @@ else if(rule == "Grensesnitt"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("OB04")){
+        file -> if(file.getName().contains("OB04")){
             filePath = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
@@ -778,8 +778,8 @@ else if(rule == "Grensesnitt"){
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
-      }
+        }
+    }
 
     // read in lines from file
     def fileContents = new File(filePath).newReader("windows-1252").readLines()
@@ -852,48 +852,52 @@ else if(rule == "Grensesnitt"){
 
 //14. This block of code loads data from the Fagsystem Grensesnitt file.
 else if(rule == "Grensesnitt_fag"){
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
     locationPath = "/data/ar/dev/inbox/grensesnitt"
+    destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/"
+    def matchingFiles = []
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("Fagsystem")){
+        file -> if(file.getName().contains("tilbake-p")){
             filePath = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
-      }
-
-    // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/" // update with NAV folder location path for archived files
-
-    def src = new File(filePath)
-    def dst = new File(destLocation + fileName)
-
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
-
+            println "file path: " + filePath
+            matchingFiles << file
+        }
+    }
+    
+        // If there are no matching files, exit early
+    if (matchingFiles.isEmpty()) {
+        println "No files matching the pattern found in the directory."
+        return
+    }
     // define header row for the file
-    output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjÃ¸ringTilIngenTilbakekreving"
-    fileContents = fileContents.drop(1)
-    for(line in fileContents) {
-        def date_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-        def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-        datestr = line.substring(date_pos_1+1,date_pos_2)
-        date = new Date().parse("yyyyMMdd", datestr)
-        newdate = date.format("dd-MMM-yyyy")
-        line = line.replaceAll(datestr,newdate)
-        output = output + '\n' + line
+    def output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjÃ¸ringTilIngenTilbakekreving"
+    // read in lines from file
+    // Process each matching file
+    matchingFiles.each { file ->
+        def fileContents = file.newReader("windows-1252").readLines()
+        println "File header: " + fileContents.get(1)
+        // Drop the header line from the file
+        fileContents = fileContents.drop(1)
+
+        for (line in fileContents) {
+            def date_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
+            def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
+            def datestr = line.substring(date_pos_1 + 1, date_pos_2)
+            def date = new Date().parse("yyyyMMdd", datestr)
+            def newdate = date.format("dd-MMM-yyyy")
+            line = line.replaceAll(datestr, newdate)
+            output = output + '\n' + line
+        }
+
+        // Move the original file to the archive location
+        def dst = new File(destLocation + file.getName())
+
+        // Copy file content for archiving
+        dst << file.text
+
+        // Delete the original file after archiving
+        file.delete()
     }
     outputFile.write(output)
 }
