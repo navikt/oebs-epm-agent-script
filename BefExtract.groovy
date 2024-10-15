@@ -52,7 +52,7 @@ if(rule == "BANK_LOAD") {
     }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/bank/arkiv/" // update with NAV folder location path for archived files
@@ -202,7 +202,7 @@ else if(rule == "OEBS_BANK_LOAD"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/OracleGL/arkiv/" // update with NAV folder location path for archived files
@@ -275,7 +275,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/" // update with NAV folder location path for archived files
@@ -327,7 +327,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
     }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/" // update with NAV folder location path for archived files
@@ -377,7 +377,7 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
@@ -431,7 +431,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/" // update with NAV folder location path for archived files
@@ -482,7 +482,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
@@ -535,7 +535,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/" // update with NAV folder location path for archived files
@@ -588,7 +588,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak_avstemming_dag/arkiv/" // update with NAV folder location path for archived files
@@ -642,7 +642,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak_avstemming_dag/arkiv/" // update with NAV folder location path for archived files
@@ -697,7 +697,7 @@ locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/" // update with NAV folder location path for archived files
@@ -735,7 +735,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/" // update with NAV folder location path for archived files
@@ -771,7 +771,7 @@ else if(rule == "Grensesnitt"){
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("OB04")){
-            path = file.getAbsolutePath()
+            filePath = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
             // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
@@ -782,7 +782,7 @@ else if(rule == "Grensesnitt"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/" // update with NAV folder location path for archived files
@@ -858,7 +858,7 @@ else if(rule == "Grensesnitt_fag"){
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("Fagsystem")){
-            path = file.getAbsolutePath()
+            filePath = file.getAbsolutePath()
             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
             // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
@@ -869,7 +869,7 @@ else if(rule == "Grensesnitt_fag"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).readLines()
+    def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/" // update with NAV folder location path for archived files
