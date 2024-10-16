@@ -573,12 +573,19 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
         def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
         def status_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
         status_str = line.substring(status_pos_1+1,status_pos_2)
-        if(type_str == "Tilsagn" && status_str == "Attestert"){
+        if(type_str == "Tilsagn" && status_str == "Godkjent"){
             def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
             def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
+            println "*************************************************"
+            println "Date_pos_1: " + date_pos_1
+            println "Date_post_2: " + date_pos_2
             datestr = line.substring(date_pos_1+1,date_pos_2)
+            println "Datestr: " + datestr
             date = new Date().parse("yyyy-MM-dd", datestr)
+            println "Date: " + date
             newdate = date.format("dd-MMM-yyyy")
+            println "Formatted date: " + newdate
+            println "*************************************************"
             line = line.replaceAll(datestr,newdate)
             line = line.replaceAll('"',"")
             output = output + '\n' + line
