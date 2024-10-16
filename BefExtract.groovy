@@ -16,12 +16,9 @@ outputFile = new File(outFileName)
 
 // 1. this block of code is for the bank file. The if logic around each code block drives which files is transformed and loaded.
 if(rule == "BANK_LOAD") {
-    // find the bank file in the current folder location by searching for tdnb# string
     locationPath = "/data/ar/dev/inbox/bank/"
     filePath = ""
     fileName = ""
-
-    // Ensure the folder exists
     def folder = new File(locationPath)
     if (!folder.exists()) {
         println "Directory not found: " + locationPath
@@ -34,9 +31,6 @@ if(rule == "BANK_LOAD") {
          file -> if(file.getName().contains("tdnb")){
              filePath = file.getAbsolutePath()
              fileName = file.getName()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
              fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
              println "Selected file name: " + fileName
              println "Selected file: " + filePath
@@ -170,7 +164,7 @@ if(rule == "BANK_LOAD") {
         
     }
     def myFile2 = new File('/data/ar/dev/data/ARCSInput2.txt')
-    myFile2.write(outputData/*.split('\n').drop(2).join('\n')*/)
+    myFile2.write(outputData)
     
     myFile.delete()
     myFile1.delete()
@@ -181,8 +175,6 @@ if(rule == "BANK_LOAD") {
 
 //2. this block of code is for the OEBS bank file
 else if(rule == "OEBS_BANK_LOAD"){
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    // find the bank file in the current folder location by searching for tdnb# string
     locationPath = "/data/ar/dev/inbox/OracleGL"
     filePath = ""
     fileName = ""
@@ -190,9 +182,6 @@ else if(rule == "OEBS_BANK_LOAD"){
          file -> if(file.getName().contains("GL2BETTY")){
              filePath = file.getAbsolutePath()
              fileName = file.getName()
-             // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-             // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-             // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
              fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
              println "Selected file name: " + fileName
              println "Selected file: " + filePath
@@ -219,7 +208,7 @@ else if(rule == "OEBS_BANK_LOAD"){
     output = "Konto-Number;Reference1;Reference2;Debit;Credit;Date;Content1;Content2;Amount"
     for(line in fileContents) {
         line = line.replaceAll(",",".")
-        // this section of code parses the string looking at the location of ; delimiter to grab specific debit and credit balances for each line
+        // this section of code parses the string looking at the location of ; delimiter to grab specific debit and credit balances for each line and date
         def deb_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
         def deb_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
         def cred_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
@@ -234,7 +223,7 @@ else if(rule == "OEBS_BANK_LOAD"){
         if(line.substring(cred_pos_1+1,cred_pos_2) == ""){
             credit = 0
         }else{credit = Float.valueOf(line.substring(cred_pos_1+1,cred_pos_2))}
-        // Extract and format the date
+
         def datestr = line.substring(date_pos_1 + 1, date_pos_2).trim()
         def norwegianDateFormat = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Parsing with Norwegian locale
         def date
@@ -257,7 +246,6 @@ else if(rule == "OEBS_BANK_LOAD"){
 
 // 3. this block of code loads the tiltak daglig file with only lines of type BESTTILLING
 else if(rule == "Tiltak_Daglig_Bestilling") {
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
     filePath = ""
     fileName = ""
@@ -265,12 +253,8 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
          file -> if(file.getName().contains("Tiltak_Daglig")){
             filePath = file.getAbsolutePath()
             fileName = file.getName()
-            //fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
             println "Selected file name: " + fileName
             println "Selected file: " + filePath
-            //println "Selected file from substring: " + fileNameFromPath
-            //println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
-
         }
     }
 
@@ -310,7 +294,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
 
 //4. This block of code loads the Tiltak Daglig Faktura file loading only lines with type FAKTURA
 else if(rule == "Tiltak_Daglig_Faktura") {
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
+
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
     filePath = ""
     fileName = ""
@@ -318,11 +302,8 @@ else if(rule == "Tiltak_Daglig_Faktura") {
          file -> if(file.getName().contains("Tiltaksfaktura_Daglig")){
             filePath = file.getAbsolutePath()
             fileName = file.getName()
-            //fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
             println "Selected file name: " + fileName
             println "Selected file: " + filePath
-            //println "Selected file from substring: " + fileNameFromPath
-            //println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
         }
     }
 
@@ -366,10 +347,7 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("LT_tiltak_avstemming_dag")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
+            filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -414,16 +392,12 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
 
 //6. This code block loads the LT tiltak avstemming daglig file loading only rows with type LT-refusjon
 else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("LT_tiltak_avstemming_dag")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
+            filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -465,16 +439,12 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
 
 //7. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert 
 else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("tiltak_avstemming_dag")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
+            filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -524,10 +494,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("tiltak_avstemming_dag")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
+            filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -572,15 +539,12 @@ else if(rule == "Tiltak_RefKrav_Arena"){
 
 // 9. This block of code loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Attestert
 else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
-    locationPath = "/data/ar/dev/inbox/Tiltak_avstemming_dag"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("tiltak_avstemming_dag")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
+            filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -591,7 +555,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
     def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak_avstemming_dag/arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -625,16 +589,12 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
 
 // 10. This block of code loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert
 else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
     locationPath = "/data/ar/dev/inbox/tiltak_avstemming_dag"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("tiltak_avstemming_dag")){
             path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -680,16 +640,12 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
 
 // 11. This block of code loads data from the Tiltakl Maanedlig file
 else if(rule == "Tiltak_Manedlig"){
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
 locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("Tiltak_Maanedlig")){
             path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -718,16 +674,12 @@ locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
 
 // 12. This block of code loads data from the Manedlig_OEBS file
 else if(rule == "Tiltak_Manedlig_OEBS"){
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
     locationPath = "/data/ar/dev/inbox/tiltak/maanedlig"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("tiltak_avstemming_mnd")){
-            path = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
+            filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -764,17 +716,12 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
 
 // 13. This block of code loads data from the OB04 Grensesnitt file
 else if(rule == "Grensesnitt"){
-    // ***NEEDS UPDATING WITH NAV SPECIFIC FILE LOCATION AND NEED TO DEFINE NAMING CONVENTION FOR FILE PICK UP
-    // read in grensesnitt file contents and read each line as a string
     locationPath = "/data/ar/dev/inbox/grensesnitt"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
         file -> if(file.getName().contains("OB04")){
             filePath = file.getAbsolutePath()
-            // this replaces \ in the file path to \\ - for windows therefore may not need this if linux server paths are '/' and not '\'
-            // filePath = path.replaceAll("\\\\", "\\\\\\\\")
-            // fileName = filePath.substring(filePath.lastIndexOf("\\") + 1)  - again this is for windows may not need it on linux server
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -865,19 +812,17 @@ else if(rule == "Grensesnitt_fag"){
         }
     }
     
-        // If there are no matching files, exit early
+
     if (matchingFiles.isEmpty()) {
         println "No files matching the pattern found in the directory."
         return
     }
     // define header row for the file
     def output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjÃ¸ringTilIngenTilbakekreving"
-    // read in lines from file
-    // Process each matching file
+
     matchingFiles.each { file ->
         def fileContents = file.newReader("windows-1252").readLines()
         println "File header: " + fileContents.get(1)
-        // Drop the header line from the file
         fileContents = fileContents.drop(1)
 
         for (line in fileContents) {
