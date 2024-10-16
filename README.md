@@ -20,8 +20,12 @@ Groovy script for bruk i EPM Integration Agent for konvertering av filer til les
 ### Innlasting av filer
 Filer skal legges i mappen `inbox` denne mappen har forskjellige undermapper basert på hvilken type avstemming og filtype det gjelder.
 
-* **Bankfiler** -> `bank`
+* **Bankfiler** -> `tdnb#.txt`
 * **OracleGL filer** -> `OracleGL`
+* **Grensesnitt filer** -> `OB04_AR.dat`
+* **Grensesnitt fag filer** -> `familie-tilbake-p.csv`, `fptilbake-p.csv`,`k9-tilbake-p.csv`
+* **Tiltak daglig bestilling filer** -> `Tiltak_Daglig`
+* **Tiltak daglig faktura filer** -> `Tiltaksfaktura_Daglig`
 * fyll ut resten her
 
 Når filen ligger i riktig mappe kan du gå inn i avstemmingsløsningen og trigge jobben for å laste data inn i **_Oracle EPM Account Reconciliation_** under **Datautveksling** og kjøre riktig jobb.
