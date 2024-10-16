@@ -589,7 +589,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
 
 // 10. This block of code loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert
 else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
-    locationPath = "/data/ar/dev/inbox/tiltak_avstemming_dag"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -605,7 +605,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     def fileContents = new File(filePath).newReader("windows-1252").readLines()
 
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak_avstemming_dag/arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
