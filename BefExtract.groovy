@@ -98,30 +98,18 @@ if(rule == "BANK_LOAD") {
         if(code == "940SWI02"){
             def KUNDENUMMER = ''
             def BDATE = ''
-            def BELOP_STRING = ''
-            def BELOP1 = ''
+            def BELOP = ''
             def AMOUNT = ''
             def content1 = ''
             def content2 = ''
             def content3 = ''
             def content4 = ''
             def content5 = ''
-            def DEBCRED = ''
-            DEBCRED = line.trim().substring(100,102).trim().toUpperCase()
             KUNDENUMMER = line.substring(10,20)
             def bankDate = new Date().parse("yyyyMMdd",line.substring(190,198))
             BDATE = bankDate.format("dd-MMM-yy")
-            BELOP1 = line.substring(103,118)
-            BELOP_STRING = BELOP1[0..-3] + '.' + BELOP1[-2..-1]
-            def BELOP = BELOP_STRING as BigDecimal
-            def DEBCRED1
-            if(DEBCRED == "C"){
-            DEBCRED1=BELOP * -1
-            }
-            else if (DEBCRED == "D"){
-            DEBCRED1=BELOP
-            }
-            AMOUNT=DEBCRED1
+            BELOP = line.substring(103,118)
+            AMOUNT = BELOP[0..-3] + '.' + BELOP[-2..-1] 
             
             // this piece of code ensures that only the relevant 04 lines for the specific 02 line are includes in the output file contents to prevent duplication
             if(editContents.get(i+1).substring(0,8) == "940SWI04"){
