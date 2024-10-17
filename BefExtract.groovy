@@ -49,18 +49,6 @@ if(rule == "BANK_LOAD") {
         return // Exit the script if no file is found
     }
 
-    // move orginal file to archive location
-    
-
-    def src = new File(filePath)
-    def dst = new File(destLocation + fileName)
-
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
-
     def file = new File(filePath)
     def reader = file.newReader("windows-1252") // Create the BufferedReader
 
@@ -203,6 +191,15 @@ if(rule == "BANK_LOAD") {
 
     long fullRunTimeEnd = System.nanoTime()
     long fullDuration = fullRunTimeEnd - fullRunTimeStart
+    // move orginal file to archive location
+    def src = new File(filePath)
+    def dst = new File(destLocation + fileName)
+
+    // copy src to dst
+    dst.text = '' // set file contents to empty incase file already exists from previous data load.
+    dst << src.text
+    // delete file in src
+    src.delete()
     println "Full runtime in: " + (fullDuration / 1_000_000) + " ms"
     println "Full runtime in: " + (fullDuration / 1_000_000_000.0) + " seconds"
     
