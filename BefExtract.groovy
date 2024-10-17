@@ -4,6 +4,8 @@ import java.util.zip.*
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.text.ParseException
+import java.io.BufferedReader
+import java.lang.StringBuilder
 
 // Turn off SQL Processing by Agent 
 agentAPI.skipAction('true')
@@ -16,7 +18,9 @@ outputFile = new File(outFileName)
 
 // 1. this block of code is for the bank file. The if logic around each code block drives which files is transformed and loaded.
 if(rule == "BANK_LOAD") {
+    long fullRunTimeStart = System.nanoTime()
     locationPath = "/data/ar/dev/inbox/bank/"
+    destLocation = "/data/ar/dev/inbox/bank/arkiv/" // update with NAV folder location path for archived files
     filePath = ""
     fileName = ""
     def folder = new File(locationPath)
@@ -45,11 +49,8 @@ if(rule == "BANK_LOAD") {
         return // Exit the script if no file is found
     }
 
-    // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
-
     // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/bank/arkiv/" // update with NAV folder location path for archived files
+    
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
@@ -64,100 +65,152 @@ if(rule == "BANK_LOAD") {
     numLines = fileContents.size()
     print numLines
     
-    // Loop through each line of the bank file and check if the line starts with 01, 04, 05 (two lines) or 02 (three lines) transaction codes
-    String edit
-    for(int i = 0;i<numLines;i++){
-        String code = fileContents.get(i).substring(0,8)
-        if(code == "940SWI01" || code == "940SWI04" || code == "940SWI05"){
-            edit = edit + "\n" + fileContents.get(i) + fileContents.get(i+1)
-        }
-        else if(code == "940SWI02"){
-            edit = edit + "\n" + fileContents.get(i) + fileContents.get(i+1) + fileContents.get(i+2)
-        }
-    }
     
-    edit1 = edit.split('\n').drop(1).join('\n')
-    def myFile = new File('/data/ar/dev/data/mySuperFile.txt')
-    myFile.write(edit1)
+
+    def file = new File(filePath)
+    def reader = file.newReader("windows-1252") // Create the BufferedReader
+
+    // Initialize variables
+    StringBuilder edit = new StringBuilder()
+    String currentLine = reader.readLine()
+    int numLines = 0
+
+    // Get the start time
+    long startTime = System.nanoTime()
+   // Loop through each line of the bank file and check if the line starts with 01, 04, 05 (two lines) or 02 (three lines) transaction codes
+    while (currentLine != null) {
+        numLines++
+        String code = currentLine.substring(0, 8)
+        
+        if (code == "940SWI01" || code == "940SWI04" || code == "940SWI05") {
+            String nextLine = reader.readLine()
+            if (nextLine != null) {
+                edit.append("\n").append(currentLine).append(nextLine)
+                numLines++
+            }
+        } else if (code == "940SWI02") {
+            String nextLine1 = reader.readLine()
+            String nextLine2 = reader.readLine()
+            if (nextLine1 != null && nextLine2 != null) {
+                edit.append("\n").append(currentLine).append(nextLine1).append(nextLine2)
+                numLines += 2
+            }
+        }
+
+        // Move to the next line
+        currentLine = reader.readLine()
+    }
+
+    // Close the reader
+    reader.close()
+
+    // Get the end time
+    long endTime = System.nanoTime()
+
+    // Calculate the duration (in nanoseconds)
+    long duration = endTime - startTime
+
+    // Print the duration in milliseconds
+    println "For loop executed in: " + (duration / 1_000_000) + " ms"
+    println "For loop executed in: " + (duration / 1_000_000_000.0) + " seconds"
+
+    // Write the result to the output file
+    def myFile = new File(locationPath +'mySuperFile2.txt')
+    // Remove the first empty line if any and join the rest
+    myFile.write(edit.toString().split('\n').drop(1).join('\n'))
     editContents = myFile.readLines()
     numLinesEdit = editContents.size()
     
-    // Need to loop through rows grabbing relevant information for each transaction 02 line and write to output file
-    String finalData
-    def code = ''
-    def line = ''
-    def VALKODE = ''
-    def ACCOUNTNUMBER = ''
-    for(int i = 0;i<numLinesEdit;i++){
-        line = editContents.get(i)
-        code = line.substring(0,8)
-        
-        if(code == "940SWI01"){  
-            VALKODE = line.substring(116,119)
-            ACCOUNTNUMBER = line.substring(41,52)}
-        if(code == "940SWI02"){
-            def KUNDENUMMER = ''
-            def BDATE = ''
-            def BELOP = ''
-            def AMOUNT = ''
-            def content1 = ''
-            def content2 = ''
-            def content3 = ''
-            def content4 = ''
-            def content5 = ''
-            KUNDENUMMER = line.substring(10,20)
-            def bankDate = new Date().parse("yyyyMMdd",line.substring(190,198))
-            BDATE = bankDate.format("dd-MMM-yy")
-            BELOP = line.substring(103,118)
-            AMOUNT = BELOP[0..-3] + '.' + BELOP[-2..-1] 
-            
-            // this piece of code ensures that only the relevant 04 lines for the specific 02 line are includes in the output file contents to prevent duplication
-            if(editContents.get(i+1).substring(0,8) == "940SWI04"){
-                content1 = editContents.get(i+1).substring(90,139)
+    // StringBuilder for finalData to avoid inefficient string concatenation
+    StringBuilder finalDataBuilder = new StringBuilder()
+
+    // Tracking start time
+    long startTime2 = System.nanoTime()
+
+    // Loop through each line of the file content
+    for (int i = 0; i < numLinesEdit; i++) {
+        String line = editContents.get(i)
+        String code = line.substring(0, 8)
+
+        // Handling 940SWI01 code
+        if (code == "940SWI01") {
+            VALKODE = line.substring(116, 119)
+            ACCOUNTNUMBER = line.substring(41, 52)
+        } else if (code == "940SWI02") {
+            // Initialize relevant variables
+            String KUNDENUMMER = line.substring(10, 20)
+            def bankDate = new Date().parse("yyyyMMdd", line.substring(190, 198))
+            String BDATE = bankDate.format("dd-MMM-yy")
+            String BELOP = line.substring(103, 118)
+            String AMOUNT = BELOP[0..-3] + '.' + BELOP[-2..-1]
+
+            // Collect content lines associated with the 940SWI02 line
+            def contents = []
+            for (int j = 1; j <= 5 && i + j < numLinesEdit; j++) {
+                String nextLine = editContents.get(i + j)
+                if (nextLine.substring(0, 8) == "940SWI02") {
+                    break // Stop if another 940SWI02 is encountered
+                }
+                if (nextLine.substring(0, 8) == "940SWI04") {
+                    contents << nextLine.substring(90, 139) // Add 940SWI04 content
+                }
             }
-            if(i<numLinesEdit-2 && editContents.get(i+2).substring(0,8) == "940SWI04" && editContents.get(i+1).substring(0,8) != "940SWI02" ){
-                content2 = editContents.get(i+2).substring(90,139)
+
+            // Ensure the content array has exactly 5 elements by padding with empty strings
+            while (contents.size() < 5) {
+                contents << ''
             }
-            if(i<numLinesEdit-3 && editContents.get(i+3).substring(0,8) == "940SWI04" && editContents.get(i+2).substring(0,8) != "940SWI02"){
-                content3 = editContents.get(i+3).substring(90,139)
-            }
-            if(i<numLinesEdit-4 && editContents.get(i+4).substring(0,8) == "940SWI04" && editContents.get(i+3).substring(0,8) != "940SWI02" && editContents.get(i+2).substring(0,8) != "940SWI02"){
-                content4 = editContents.get(i+4).substring(90,139)
-            }
-            if(i<numLinesEdit-5 && editContents.get(i+5).substring(0,8) == "940SWI04" && editContents.get(i+4).substring(0,8) != "940SWI02" && editContents.get(i+3).substring(0,8) != "940SWI02" && editContents.get(i+2).substring(0,8) != "940SWI02"){
-                content5 = editContents.get(i+5).substring(90,139)
-            }
-            finalData = finalData + "\n" + KUNDENUMMER + ',' + ACCOUNTNUMBER + ',' + VALKODE + ',' + BDATE + ',' + BELOP + ',' + AMOUNT + ',' + content1 + ',' + content2 + ',' + content3 + ',' + content4 + ',' + content5
-            
+
+            // Append to finalDataBuilder
+            finalDataBuilder.append("\n")
+                .append(KUNDENUMMER).append(',')
+                .append(ACCOUNTNUMBER).append(',')
+                .append(VALKODE).append(',')
+                .append(BDATE).append(',')
+                .append(BELOP).append(',')
+                .append(AMOUNT).append(',')
+                .append(contents.join(','))
         }
     }
 
-    def myFile1 = new File('/data/ar/dev/data/ARCSInput.txt')
-    myFile1.write(finalData.split('\n').drop(1).join('\n'))
+    // Calculate the execution duration
+    long endTime2 = System.nanoTime()
+    long duration2 = endTime2 - startTime2
+    println "2nd For loop executed in: " + (duration2 / 1_000_000) + " ms"
+    println "2nd For loop executed in: " + (duration2 / 1_000_000_000.0) + " seconds"
 
-    String arcsData
-    String outputData = 'KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5'
-    arcsData = myFile1.text.split('\n').each{row ->
-    // def newRow
-    a = ''
-        row.split(',').each{e ->
-            if(a==''){
-                a = e.trim()
-            }
-            else {
-                a = a + ',' + e.trim()
-            }
-        }
-            outputData = outputData + '\n' + a
-        
+    // Write final data to output file
+    def myFile1 = new File(locationPath + 'ARCSInput.txt')
+    myFile1.write(finalDataBuilder.toString().trim()) // Write without leading or trailing newlines
+
+    // Use StringBuilder for efficient string concatenation
+    StringBuilder outputDataBuilder = new StringBuilder('KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5')
+    long startTime3 = System.nanoTime()
+    myFile1.text.eachLine { row ->
+        // Use a single pass over the row, trimming and joining the values
+        String cleanedRow = row.split(',').collect { it.trim() }.join(',')
+        outputDataBuilder.append('\n').append(cleanedRow)
     }
-    def myFile2 = new File('/data/ar/dev/data/ARCSInput2.txt')
+
+    // Convert the StringBuilder to a string when needed
+    String outputData = outputDataBuilder.toString()
+
+    long endTime3 = System.nanoTime()
+    long duration3 = endTime3 - startTime3
+    println "3rd For loop executed in: " + (duration3 / 1_000_000) + " ms"
+    println "3rd For loop executed in: " + (duration3 / 1_000_000_000.0) + " seconds"
+    def myFile2 = new File(locationPath + 'ARCSInput2.txt')
     myFile2.write(outputData)
-    
+        
     myFile.delete()
     myFile1.delete()
     myFile2.delete()
     outputFile.write(outputData)
+
+    long fullRunTimeEnd = System.nanoTime()
+    long fullDuration = fullRunTimeEnd - fullRunTimeStart
+    println "Full runtime in: " + (fullDuration / 1_000_000) + " ms"
+    println "Full runtime in: " + (fullDuration / 1_000_000_000.0) + " seconds"
     
 }
 
@@ -785,7 +838,7 @@ else if(rule == "Grensesnitt"){
     outputFile.write(output)
 }
 
-//14. This block of code loads data from the Fagsystem Grensesnitt file.
+//14. This block of code loads data from the Fagsystem Grensesnitt files.
 else if(rule == "Grensesnitt_fag"){
     locationPath = "/data/ar/dev/inbox/grensesnitt"
     destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/"
