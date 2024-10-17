@@ -61,12 +61,6 @@ if(rule == "BANK_LOAD") {
     // delete file in src
     src.delete()
 
-    // get number of lines present in the file contents
-    numLines = fileContents.size()
-    print numLines
-    
-    
-
     def file = new File(filePath)
     def reader = file.newReader("windows-1252") // Create the BufferedReader
 
