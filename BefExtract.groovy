@@ -99,8 +99,13 @@ if(rule == "BANK_LOAD") {
     // Write the result to the output file
     def myFile = new File(locationPath +'mySuperFile2.txt')
     // Remove the first empty line if any and join the rest
-    myFile.write(edit.toString().split('\n').drop(1).join('\n'))
-    editContents = myFile.readLines()
+    myFile.write(edit.toString().split('\n').drop(1).join('\n'), "windows-1252")
+    // Read the file using Windows-1252 encoding into a list of lines
+    def editContents = []
+    myFile.withReader("windows-1252") { fileReader ->
+        editContents = fileReader.readLines()
+    }
+
     numLinesEdit = editContents.size()
     
     // StringBuilder for finalData to avoid inefficient string concatenation
@@ -162,31 +167,44 @@ if(rule == "BANK_LOAD") {
     println "2nd For loop executed in: " + (duration2 / 1_000_000_000.0) + " seconds"
 
     // Write final data to output file
+    // Writing finalDataBuilder content directly, without transformation, to ARCSInput.txt
     def myFile1 = new File(locationPath + 'ARCSInput.txt')
-    myFile1.write(finalDataBuilder.toString().trim()) // Write without leading or trailing newlines
-
+    myFile1.withWriter("windows-1252") { writer ->
+        writer.write(finalDataBuilder.toString().trim()) // Write directly with encoding
+    }
     // Use StringBuilder for efficient string concatenation
     StringBuilder outputDataBuilder = new StringBuilder('KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5')
     long startTime3 = System.nanoTime()
-    myFile1.text.eachLine { row ->
-        // Use a single pass over the row, trimming and joining the values
-        String cleanedRow = row.split(',').collect { it.trim() }.join(',')
-        outputDataBuilder.append('\n').append(cleanedRow)
+
+    // Process each line from the file
+    myFile1.withReader("windows-1252") { trimReader ->
+        trimReader.eachLine { row ->
+            // Trim and collect row values efficiently
+            String cleanedRow = row.split(',').collect { it.trim() }.join(',')
+            outputDataBuilder.append('\n').append(cleanedRow)
+        }
     }
 
-    // Convert the StringBuilder to a string when needed
-    String outputData = outputDataBuilder.toString()
+    // Convert the StringBuilder content to a string only once
+    String outputData = outputDataBuilder.toString().trim()
 
+    // Measure duration of the loop
     long endTime3 = System.nanoTime()
     long duration3 = endTime3 - startTime3
     println "3rd For loop executed in: " + (duration3 / 1_000_000) + " ms"
     println "3rd For loop executed in: " + (duration3 / 1_000_000_000.0) + " seconds"
+
+    // Write the final output to the file in Windows-1252 encoding
     def myFile2 = new File(locationPath + 'ARCSInput2.txt')
-    myFile2.write(outputData)
-        
+    myFile2.withWriter("windows-1252") { outputWriter ->
+        outputWriter.write(outputData) // Write once
+    }
+  
     myFile.delete()
     myFile1.delete()
     myFile2.delete()
+
+    // Write the final output to the file using Windows-1252 encoding
     outputFile.write(outputData)
 
     long fullRunTimeEnd = System.nanoTime()
