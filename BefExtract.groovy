@@ -800,6 +800,7 @@ else if(rule == "Grensesnitt"){
 else if(rule == "Grensesnitt_fag"){
     locationPath = "/data/ar/dev/inbox/grensesnitt"
     destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/"
+    def encodingFag = "UTF-8"
     def matchingFiles = []
     filePath = ""
     fileName = ""
@@ -817,10 +818,10 @@ else if(rule == "Grensesnitt_fag"){
         return
     }
     // define header row for the file
-    def output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjÃ¸ringTilIngenTilbakekreving"
+    def output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjøringTilIngenTilbakekreving"
 
     matchingFiles.each { file ->
-        def fileContents = file.newReader(encoding).readLines()
+        def fileContents = file.newReader(encodingFag).readLines()
         println "File header: " + fileContents.get(1)
         fileContents = fileContents.drop(1)
 
@@ -835,10 +836,10 @@ else if(rule == "Grensesnitt_fag"){
         }
 
         // Move the original file to the archive location
-        def src = new File(filePath)
         def dst = new File(destLocation + file.getName())
-
-        copyFileWithEncoding(src, dst, encoding)
+        
+        // Copy the file with the specified encoding
+        copyFileWithEncoding(file, dst, encodingFag)
     }
     outputFile.write(output)
 }
