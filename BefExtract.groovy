@@ -15,6 +15,7 @@ bindVariables = agentAPI.getBindVariables()
 rule = bindVariables["Rule"]
 def outFileName = agentContext["DATAFILENAME"]
 outputFile = new File(outFileName)
+def String encoding = "ISO-8859-1"
 
 // 1. this block of code is for the bank file. The if logic around each code block drives which files is transformed and loaded.
 if(rule == "BANK_LOAD") {
@@ -50,7 +51,7 @@ if(rule == "BANK_LOAD") {
     }
 
     def file = new File(filePath)
-    def reader = file.newReader("windows-1252") // Create the BufferedReader
+    def reader = file.newReader(encoding) // Create the BufferedReader
 
     // Initialize variables
     StringBuilder edit = new StringBuilder()
@@ -99,10 +100,10 @@ if(rule == "BANK_LOAD") {
     // Write the result to the output file
     def myFile = new File(locationPath +'mySuperFile2.txt')
     // Remove the first empty line if any and join the rest
-    myFile.write(edit.toString().split('\n').drop(1).join('\n'), "windows-1252")
+    myFile.write(edit.toString().split('\n').drop(1).join('\n'), encoding)
     // Read the file using Windows-1252 encoding into a list of lines
     def editContents = []
-    myFile.withReader("windows-1252") { fileReader ->
+    myFile.withReader(encoding) { fileReader ->
         editContents = fileReader.readLines()
     }
 
@@ -169,7 +170,7 @@ if(rule == "BANK_LOAD") {
     // Write final data to output file
     // Writing finalDataBuilder content directly, without transformation, to ARCSInput.txt
     def myFile1 = new File(locationPath + 'ARCSInput.txt')
-    myFile1.withWriter("windows-1252") { writer ->
+    myFile1.withWriter(encoding) { writer ->
         writer.write(finalDataBuilder.toString().trim()) // Write directly with encoding
     }
     // Use StringBuilder for efficient string concatenation
@@ -177,7 +178,7 @@ if(rule == "BANK_LOAD") {
     long startTime3 = System.nanoTime()
 
     // Process each line from the file
-    myFile1.withReader("windows-1252") { trimReader ->
+    myFile1.withReader(encoding) { trimReader ->
         trimReader.eachLine { row ->
             // Trim and collect row values efficiently
             String cleanedRow = row.split(',').collect { it.trim() }.join(',')
@@ -196,7 +197,7 @@ if(rule == "BANK_LOAD") {
 
     // Write the final output to the file in Windows-1252 encoding
     def myFile2 = new File(locationPath + 'ARCSInput2.txt')
-    myFile2.withWriter("windows-1252") { outputWriter ->
+    myFile2.withWriter(encoding) { outputWriter ->
         outputWriter.write(outputData) // Write once
     }
   
@@ -213,11 +214,8 @@ if(rule == "BANK_LOAD") {
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
+    
     println "Full runtime in: " + (fullDuration / 1_000_000) + " ms"
     println "Full runtime in: " + (fullDuration / 1_000_000_000.0) + " seconds"
     
@@ -241,7 +239,7 @@ else if(rule == "OEBS_BANK_LOAD"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/OracleGL/arkiv/" // update with NAV folder location path for archived files
@@ -249,11 +247,7 @@ else if(rule == "OEBS_BANK_LOAD"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
 
     output = "Konto-Number;Reference1;Reference2;Debit;Credit;Date;Content1;Content2;Amount"
     for(line in fileContents) {
@@ -309,7 +303,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/" // update with NAV folder location path for archived files
@@ -317,11 +311,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()    
+    copyFileWithEncoding(src, dst, encoding)   
     
     output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
     for(line in fileContents) {
@@ -358,7 +348,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
     }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/" // update with NAV folder location path for archived files
@@ -366,11 +356,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer"
     for(line in fileContents) {
@@ -405,7 +391,7 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
@@ -413,11 +399,7 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
@@ -455,7 +437,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/" // update with NAV folder location path for archived files
@@ -463,11 +445,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()    
+    copyFileWithEncoding(src, dst, encoding)   
     
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
@@ -502,7 +480,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
@@ -510,11 +488,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
@@ -552,7 +526,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/" // update with NAV folder location path for archived files
@@ -560,11 +534,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
@@ -602,7 +572,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
@@ -610,11 +580,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
     
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
@@ -652,7 +618,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
@@ -660,11 +626,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
@@ -703,7 +665,7 @@ locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/" // update with NAV folder location path for archived files
@@ -711,11 +673,8 @@ locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()    
+    copyFileWithEncoding(src, dst, encoding)
+
     // define header row for the file
     output="Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
     output = output +'\n' + fileContents
@@ -737,7 +696,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
       }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     // move orginal file to archive location
     destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/" // update with NAV folder location path for archived files
@@ -745,11 +704,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
     
     // define header row for the file
     output="Dato;Referanse;Year;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
@@ -767,6 +722,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
 // 13. This block of code loads data from the OB04 Grensesnitt file
 else if(rule == "Grensesnitt"){
     locationPath = "/data/ar/dev/inbox/grensesnitt"
+    destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -779,19 +735,12 @@ else if(rule == "Grensesnitt"){
     }
 
     // read in lines from file
-    def fileContents = new File(filePath).newReader("windows-1252").readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/" // update with NAV folder location path for archived files
+    def fileContents = new File(filePath).newReader(encoding).readLines()
 
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
 
-    // copy src to dst
-    dst.text = '' // set file contents to empty incase file already exists from previous data load.
-    dst << src.text
-    // delete file in src
-    src.delete()
+    copyFileWithEncoding(src, dst, encoding)
 
     // define header row for the file and set the comma-delimited output headers for the output file
     output = "ref1,vedtaksID,belop_file,dato_overfort,person_nr,FOM,TOM,ytelseskonto,ref2,dato,kostnadssted,ansvarssted,ref3,rente1,rente2,ref4,fagsystem_ID"
@@ -871,7 +820,7 @@ else if(rule == "Grensesnitt_fag"){
     def output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjÃ¸ringTilIngenTilbakekreving"
 
     matchingFiles.each { file ->
-        def fileContents = file.newReader("windows-1252").readLines()
+        def fileContents = file.newReader(encoding).readLines()
         println "File header: " + fileContents.get(1)
         fileContents = fileContents.drop(1)
 
@@ -886,13 +835,20 @@ else if(rule == "Grensesnitt_fag"){
         }
 
         // Move the original file to the archive location
+        def src = new File(filePath)
         def dst = new File(destLocation + file.getName())
 
-        // Copy file content for archiving
-        dst << file.text
-
-        // Delete the original file after archiving
-        file.delete()
+        copyFileWithEncoding(src, dst, encoding)
     }
     outputFile.write(output)
+}
+
+// Define a reusable method for copying files with a specified encoding
+def copyFileWithEncoding(File src, File dst, String encoding) {
+    src.withReader(encoding) { reader ->
+        dst.withWriter(encoding) { writer ->
+            writer << reader // Copy content with the specified encoding
+        }
+    }
+    src.delete() // Optionally delete the source file after copying
 }
