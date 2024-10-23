@@ -21,13 +21,13 @@ def String encoding = "ISO-8859-1"
 if(rule == "BANK_LOAD") {
     long fullRunTimeStart = System.nanoTime()
     locationPath = "/data/ar/dev/inbox/bank/"
-    destLocation = "/data/ar/dev/inbox/bank/arkiv/" // update with NAV folder location path for archived files
+    destLocation = "/data/ar/dev/inbox/bank/arkiv/"
     filePath = ""
     fileName = ""
     def folder = new File(locationPath)
     if (!folder.exists()) {
         println "Directory not found: " + locationPath
-        return // Exit script if directory does not exist
+        return
     } else {
         println "Directory found: " + locationPath
     }
@@ -47,7 +47,7 @@ if(rule == "BANK_LOAD") {
     // Check if a valid file was found
     if (filePath == "") {
         println "No matching file found with 'tdnb' in its name."
-        return // Exit the script if no file is found
+        return 
     }
 
     def file = new File(filePath)
@@ -57,43 +57,40 @@ if(rule == "BANK_LOAD") {
     StringBuilder edit = new StringBuilder()
     String currentLine = reader.readLine()
     int numLines = 0
-
-    // Get the start time
     long startTime = System.nanoTime()
+
    // Loop through each line of the bank file and check if the line starts with 01, 04, 05 (two lines) or 02 (three lines) transaction codes
     while (currentLine != null) {
-        numLines++
-        String code = currentLine.substring(0, 8)
-        
-        if (code == "940SWI01" || code == "940SWI04" || code == "940SWI05") {
-            String nextLine = reader.readLine()
-            if (nextLine != null) {
-                edit.append("\n").append(currentLine).append(nextLine)
-                numLines++
-            }
-        } else if (code == "940SWI02") {
-            String nextLine1 = reader.readLine()
-            String nextLine2 = reader.readLine()
-            if (nextLine1 != null && nextLine2 != null) {
-                edit.append("\n").append(currentLine).append(nextLine1).append(nextLine2)
-                numLines += 2
+        if(!currentLine.trim().isEmpty()) {
+            numLines++
+            String code = currentLine.substring(0, 8)
+            
+            if (code == "940SWI01" || code == "940SWI04" || code == "940SWI05") {
+                String nextLine = reader.readLine()
+                if (nextLine != null) {
+                    edit.append("\n").append(currentLine).append(nextLine)
+                    numLines++
+                } else {
+                    println("Error: Forventet en linje etter kode 940SWI01/04/05 på linje: " + numLines + " ,men linjen mangler.")
+                }
+            } else if (code == "940SWI02") {
+                String nextLine1 = reader.readLine()
+                String nextLine2 = reader.readLine()
+                if (nextLine1 != null && nextLine2 != null) {
+                    edit.append("\n").append(currentLine).append(nextLine1).append(nextLine2)
+                    numLines += 2
+                } else {
+                    println("Error: Forventet to linjer etter kode 940SWI02 på linje:" + numLines " ,men en eller begge linjene mangler.")
+                }
             }
         }
-
-        // Move to the next line
         currentLine = reader.readLine()
     }
 
-    // Close the reader
     reader.close()
 
-    // Get the end time
     long endTime = System.nanoTime()
-
-    // Calculate the duration (in nanoseconds)
     long duration = endTime - startTime
-
-    // Print the duration in milliseconds
     println "For loop executed in: " + (duration / 1_000_000) + " ms"
     println "For loop executed in: " + (duration / 1_000_000_000.0) + " seconds"
 
@@ -101,18 +98,15 @@ if(rule == "BANK_LOAD") {
     def myFile = new File(locationPath +'mySuperFile2.txt')
     // Remove the first empty line if any and join the rest
     myFile.write(edit.toString().split('\n').drop(1).join('\n'), encoding)
-    // Read the file using Windows-1252 encoding into a list of lines
+
     def editContents = []
     myFile.withReader(encoding) { fileReader ->
         editContents = fileReader.readLines()
     }
 
     numLinesEdit = editContents.size()
-    
-    // StringBuilder for finalData to avoid inefficient string concatenation
-    StringBuilder finalDataBuilder = new StringBuilder()
 
-    // Tracking start time
+    StringBuilder finalDataBuilder = new StringBuilder()
     long startTime2 = System.nanoTime()
 
     // Loop through each line of the file content
@@ -125,15 +119,13 @@ if(rule == "BANK_LOAD") {
             VALKODE = line.substring(116, 119)
             ACCOUNTNUMBER = line.substring(41, 52)
         } else if (code == "940SWI02") {
-            // Initialize relevant variables
             String KUNDENUMMER = line.substring(10, 20)
             def bankDate = new Date().parse("yyyyMMdd", line.substring(190, 198))
             String BDATE = bankDate.format("dd-MMM-yy")
             String BELOP = line.substring(103, 118)
             String AMOUNT = BELOP[0..-3] + '.' + BELOP[-2..-1]
-
-            // Collect content lines associated with the 940SWI02 line
             def contents = []
+
             for (int j = 1; j <= 5 && i + j < numLinesEdit; j++) {
                 String nextLine = editContents.get(i + j)
                 if (nextLine.substring(0, 8) == "940SWI02") {
@@ -161,41 +153,34 @@ if(rule == "BANK_LOAD") {
         }
     }
 
-    // Calculate the execution duration
     long endTime2 = System.nanoTime()
     long duration2 = endTime2 - startTime2
     println "2nd For loop executed in: " + (duration2 / 1_000_000) + " ms"
     println "2nd For loop executed in: " + (duration2 / 1_000_000_000.0) + " seconds"
 
-    // Write final data to output file
-    // Writing finalDataBuilder content directly, without transformation, to ARCSInput.txt
     def myFile1 = new File(locationPath + 'ARCSInput.txt')
     myFile1.withWriter(encoding) { writer ->
-        writer.write(finalDataBuilder.toString().trim()) // Write directly with encoding
+        writer.write(finalDataBuilder.toString().trim())
     }
-    // Use StringBuilder for efficient string concatenation
+
     StringBuilder outputDataBuilder = new StringBuilder('KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5')
     long startTime3 = System.nanoTime()
 
     // Process each line from the file
     myFile1.withReader(encoding) { trimReader ->
         trimReader.eachLine { row ->
-            // Trim and collect row values efficiently
             String cleanedRow = row.split(',').collect { it.trim() }.join(',')
             outputDataBuilder.append('\n').append(cleanedRow)
         }
     }
 
-    // Convert the StringBuilder content to a string only once
     String outputData = outputDataBuilder.toString().trim()
 
-    // Measure duration of the loop
     long endTime3 = System.nanoTime()
     long duration3 = endTime3 - startTime3
     println "3rd For loop executed in: " + (duration3 / 1_000_000) + " ms"
     println "3rd For loop executed in: " + (duration3 / 1_000_000_000.0) + " seconds"
 
-    // Write the final output to the file in Windows-1252 encoding
     def myFile2 = new File(locationPath + 'ARCSInput2.txt')
     myFile2.withWriter(encoding) { outputWriter ->
         outputWriter.write(outputData) // Write once
@@ -205,25 +190,22 @@ if(rule == "BANK_LOAD") {
     myFile1.delete()
     myFile2.delete()
 
-    // Write the final output to the file using Windows-1252 encoding
+    // Write the final output to the file
     outputFile.write(outputData)
 
     long fullRunTimeEnd = System.nanoTime()
     long fullDuration = fullRunTimeEnd - fullRunTimeStart
-    // move orginal file to archive location
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
-    
     println "Full runtime in: " + (fullDuration / 1_000_000) + " ms"
     println "Full runtime in: " + (fullDuration / 1_000_000_000.0) + " seconds"
-    
 }
 
 //2. this block of code is for the OEBS bank file
 else if(rule == "OEBS_BANK_LOAD"){
     locationPath = "/data/ar/dev/inbox/OracleGL"
+    destLocation = "/data/ar/dev/inbox/OracleGL/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -235,18 +217,13 @@ else if(rule == "OEBS_BANK_LOAD"){
              println "Selected file: " + filePath
              println "Selected file from substring: " + fileNameFromPath
              println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
-      }
+        }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/OracleGL/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
 
     output = "Konto-Number;Reference1;Reference2;Debit;Credit;Date;Content1;Content2;Amount"
@@ -275,7 +252,6 @@ else if(rule == "OEBS_BANK_LOAD"){
             date = norwegianDateFormat.parse(datestr)
         } catch (ParseException e) {
             println "Error parsing date: ${e.message}"
-            // Handle the error appropriately (e.g., set date to null or log it)
         }
 
         def sdf = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Formatting with English locale
@@ -291,6 +267,7 @@ else if(rule == "OEBS_BANK_LOAD"){
 // 3. this block of code loads the tiltak daglig file with only lines of type BESTTILLING
 else if(rule == "Tiltak_Daglig_Bestilling") {
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -302,15 +279,10 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
         }
     }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)   
     
     output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
@@ -334,8 +306,8 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
 
 //4. This block of code loads the Tiltak Daglig Faktura file loading only lines with type FAKTURA
 else if(rule == "Tiltak_Daglig_Faktura") {
-
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -347,15 +319,10 @@ else if(rule == "Tiltak_Daglig_Faktura") {
         }
     }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer"
@@ -379,6 +346,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
 //5. This block of code loads the LT tiltak avstemming daglig file loading only rows with type LT-tilsagn and status of Godkjent
 else if(rule == "Tiltak_Tilsagn_Arena"){
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -387,18 +355,13 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
-      }
+        }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
@@ -425,6 +388,7 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
 //6. This code block loads the LT tiltak avstemming daglig file loading only rows with type LT-refusjon
 else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -433,18 +397,13 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
-      }
+        }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)   
     
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
@@ -468,6 +427,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
 //7. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert 
 else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" 
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -476,18 +436,13 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
-      }
+        }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
@@ -514,6 +469,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
 //8. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Refusjonskrav 
 else if(rule == "Tiltak_RefKrav_Arena"){
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -523,17 +479,12 @@ else if(rule == "Tiltak_RefKrav_Arena"){
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
          }
-      }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
@@ -560,6 +511,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
 // 9. This block of code loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Attestert
 else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -569,17 +521,12 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
          }
-      }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
     
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
@@ -606,6 +553,8 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
 // 10. This block of code loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert
 else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/"
+
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -615,17 +564,12 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
          }
-      }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
@@ -652,7 +596,8 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
 
 // 11. This block of code loads data from the Tiltakl Maanedlig file
 else if(rule == "Tiltak_Manedlig"){
-locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
+    locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
+    destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -661,20 +606,14 @@ locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
-      }
+        }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
-
     // define header row for the file
     output="Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
     output = output +'\n' + fileContents
@@ -684,6 +623,7 @@ locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
 // 12. This block of code loads data from the Manedlig_OEBS file
 else if(rule == "Tiltak_Manedlig_OEBS"){
     locationPath = "/data/ar/dev/inbox/tiltak/maanedlig"
+    destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -692,18 +632,13 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
-         }
-      }
+        }
+    }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
-    // move orginal file to archive location
-    destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/" // update with NAV folder location path for archived files
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
     
     // define header row for the file
@@ -715,7 +650,6 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
         line = line.replaceAll(datestr,newdate.toString())
         output = output +'\n' + line
     }
-    
     outputFile.write(output)
 }
 
@@ -734,12 +668,10 @@ else if(rule == "Grensesnitt"){
         }
     }
 
-    // read in lines from file
     def fileContents = new File(filePath).newReader(encoding).readLines()
-
+    fileContents = filterNonEmptyLines(fileContents)
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-
     copyFileWithEncoding(src, dst, encoding)
 
     // define header row for the file and set the comma-delimited output headers for the output file
@@ -785,14 +717,12 @@ else if(rule == "Grensesnitt"){
             rente2 = line.substring(155,162)
             ref4 = line.substring(162,170)
             fagsystem_ID = line.substring(170,179)
-
-        // create comma delimited line to be loaded
-        newline = ref1 + "," + vedtaksID + "," + belop_file + "," + dato_overfort + "," + personNr + "," + FOM + "," + TOM + "," + ytelseskonto + "," + ref2 + "," + dato + "," + kostnadssted + "," + ansvarssted + "," + ref3 + "," + rente1 + "," + rente2 + "," + ref4 + "," + fagsystem_ID
-        // add new line to the cummulating output string
-        output = output + "\n" + newline
+            // create comma delimited line to be loaded
+            newline = ref1 + "," + vedtaksID + "," + belop_file + "," + dato_overfort + "," + personNr + "," + FOM + "," + TOM + "," + ytelseskonto + "," + ref2 + "," + dato + "," + kostnadssted + "," + ansvarssted + "," + ref3 + "," + rente1 + "," + rente2 + "," + ref4 + "," + fagsystem_ID
+            // add new line to the cummulating output string
+            output = output + "\n" + newline
         }
     }
-    // write final output to file to be loaded
     outputFile.write(output)
 }
 
@@ -811,7 +741,6 @@ else if(rule == "Grensesnitt_fag"){
             matchingFiles << file
         }
     }
-    
 
     if (matchingFiles.isEmpty()) {
         println "No files matching the pattern found in the directory."
@@ -824,8 +753,10 @@ else if(rule == "Grensesnitt_fag"){
         def fileContents = file.newReader(encodingFag).readLines()
         println "File header: " + fileContents.get(1)
         fileContents = fileContents.drop(1)
-
+        fileContents = filterNonEmptyLines(fileContents)
+        
         for (line in fileContents) {
+
             def date_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
             def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
             def datestr = line.substring(date_pos_1 + 1, date_pos_2)
@@ -835,10 +766,7 @@ else if(rule == "Grensesnitt_fag"){
             output = output + '\n' + line
         }
 
-        // Move the original file to the archive location
         def dst = new File(destLocation + file.getName())
-        
-        // Copy the file with the specified encoding
         copyFileWithEncoding(file, dst, encodingFag)
     }
     outputFile.write(output)
@@ -852,4 +780,9 @@ def copyFileWithEncoding(File src, File dst, String encoding) {
         }
     }
     src.delete() // Optionally delete the source file after copying
+}
+
+// Method to filter out blank lines or lines with only whitespace
+def filterNonEmptyLines(List<String> lines) {
+    return lines.findAll { line -> !line.trim().isEmpty() }
 }
