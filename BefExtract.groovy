@@ -599,7 +599,7 @@ else if(rule == "Tiltak_Manedlig"){
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("Tiltak_Maanedlig")){
-            path = file.getAbsolutePath()
+            filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
             println filePath.substring(filePath.lastIndexOf("/") + 1)
@@ -611,26 +611,21 @@ else if(rule == "Tiltak_Manedlig"){
     
     // define header row for the file
     output="Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
-    for(lines in fileContents) {
-        def datestr = line.substring(20,29).trim()
-        println "dato substring: " + datestr
+    for(line in fileContents) {
+        def datestr = line.substring(19,29).trim()
         def norwegianDateFormat = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Parsing with Norwegian locale
         def date
         try {
             date = norwegianDateFormat.parse(datestr)
-            println "Norwegian date format: " + norwegianDateFormat
         } catch (ParseException e) {
             println "Error parsing date: ${e.message}"
         }
         def sdf = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Formatting with English locale
         def newdate = sdf.format(date)
-        println "english date format: " + newdate
-
         // Replace the original date string with the newly formatted date in the line
         line = line.replace(datestr, newdate)
         output = output +'\n' + line
     }
-  
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
     copyFileWithEncoding(src, dst, encoding)
