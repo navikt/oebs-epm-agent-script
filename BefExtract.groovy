@@ -70,18 +70,14 @@ if(rule == "BANK_LOAD") {
                 if (nextLine != null) {
                     edit.append("\n").append(currentLine).append(nextLine)
                     numLines++
-                } else {
-                    println("Error: Forventet en linje etter kode 940SWI01/04/05 på linje: " + numLines + " ,men linjen mangler.")
-                }
+                } 
             } else if (code == "940SWI02") {
                 String nextLine1 = reader.readLine()
                 String nextLine2 = reader.readLine()
                 if (nextLine1 != null && nextLine2 != null) {
                     edit.append("\n").append(currentLine).append(nextLine1).append(nextLine2)
                     numLines += 2
-                } else {
-                    println("Error: Forventet to linjer etter kode 940SWI02 på linje:" + numLines " ,men en eller begge linjene mangler.")
-                }
+                } 
             }
         }
         currentLine = reader.readLine()
@@ -503,6 +499,8 @@ else if(rule == "Tiltak_RefKrav_Arena"){
             line = line.replaceAll(datestr,newdate)
             line = line.replaceAll('"',"")
             output = output + '\n' + line
+            println "line to be added to output: " + line
+            println "output: " output
         }
     }
     outputFile.write(output)
@@ -554,7 +552,6 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
 else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
     destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/"
-
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -611,12 +608,33 @@ else if(rule == "Tiltak_Manedlig"){
 
     def fileContents = new File(filePath).newReader(encoding).readLines()
     fileContents = filterNonEmptyLines(fileContents)
+    
+    // define header row for the file
+    output="Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
+    for(lines in fileContents) {
+        def datestr = line.substring(20,29).trim()
+        println "dato substring: " + datestr
+        def norwegianDateFormat = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Parsing with Norwegian locale
+        def date
+        try {
+            date = norwegianDateFormat.parse(datestr)
+            println "Norwegian date format: " + norwegianDateFormat
+        } catch (ParseException e) {
+            println "Error parsing date: ${e.message}"
+        }
+        def sdf = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Formatting with English locale
+        def newdate = sdf.format(date)
+        println "english date format: " + newdate
+
+        // Replace the original date string with the newly formatted date in the line
+        line = line.replace(datestr, newdate)
+        output = output +'\n' + line
+    }
+  
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
     copyFileWithEncoding(src, dst, encoding)
-    // define header row for the file
-    output="Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
-    output = output +'\n' + fileContents
+    
     outputFile.write(output)
 }
 
@@ -645,8 +663,8 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
     output="Dato;Referanse;Year;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
     for(line in fileContents) {
         datestr = line.substring(0,10)
-        date = new Date().parse("dd.MM.yyyy",datestr)
-        newdate = date.format("dd-MMM-yyyy")
+        date = new SimpleDateFormat("dd-MM-yyyy").parse(datestr)
+        newdate = new SimpleDateFormat("dd-MMM-yyyy").format(date)
         line = line.replaceAll(datestr,newdate.toString())
         output = output +'\n' + line
     }
@@ -746,6 +764,7 @@ else if(rule == "Grensesnitt_fag"){
         println "No files matching the pattern found in the directory."
         return
     }
+
     // define header row for the file
     def output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjøringTilIngenTilbakekreving"
 
