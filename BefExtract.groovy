@@ -283,8 +283,10 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
     
     output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
+        //TODO: change to read the whole file including LT-lines
         if(type_str == 'BESTILLING') {
             def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
             def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
@@ -307,7 +309,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("Tiltaksfaktura_Daglig")){
+        file -> if(file.getName().contains("Tiltaksfaktura_Daglig")){
             filePath = file.getAbsolutePath()
             fileName = file.getName()
             println "Selected file name: " + fileName
@@ -317,32 +319,58 @@ else if(rule == "Tiltak_Daglig_Faktura") {
 
     def fileContents = new File(filePath).newReader(encoding).readLines()
     fileContents = filterNonEmptyLines(fileContents)
+    
+    // Combine lines if needed
+    def combinedLines = []
+    def currentLine = ""
+    
+    for(line in fileContents) {
+        if(line.startsWith("FAKTURA") || line.startsWith("LT-FAKTURA") || line.trim().isEmpty()) {
+            // If there's an existing accumulated line, add it to the list before starting a new one
+            if(currentLine) {
+                combinedLines << currentLine
+            }
+            currentLine = line  // Start a new line
+        } else {
+            currentLine += line.trim()  // Append to the current line if it doesn't start with a keyword
+        }
+    }
+    // Add the last accumulated line
+    if(currentLine) {
+        combinedLines << currentLine
+    }
+
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
     copyFileWithEncoding(src, dst, encoding)
 
     output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer"
-    for(line in fileContents) {
+    
+    for(line in combinedLines) {
+        line = line.replaceAll(",",".")
         def type_pos_1 = line.indexOf(";")
-        type_str = line.substring(0,type_pos_1)
+        type_str = line.substring(0, type_pos_1)
+
         if(type_str == 'FAKTURA') {
             def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
             def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            datestr = line.substring(date_pos_1+1,date_pos_2)
+            datestr = line.substring(date_pos_1+1, date_pos_2)
             date = new Date().parse("yyyy-MM-dd", datestr)
             newdate = date.format("dd-MMM-yyyy")
-            line = line.replaceAll(datestr,newdate)
-            line = line.replaceAll('"',"")
+            line = line.replaceAll(datestr, newdate)
+            line = line.replaceAll('"', "")
             output = output + '\n' + line
         }
     }
+    
     outputFile.write(output)
 }
 
+
 //5. This block of code loads the LT tiltak avstemming daglig file loading only rows with type LT-tilsagn and status of Godkjent
-else if(rule == "Tiltak_Tilsagn_Arena"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/"
+else if(rule == "Tiltak_Tilsagn_Arena_LT"){
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/arkiv/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
@@ -362,12 +390,13 @@ else if(rule == "Tiltak_Tilsagn_Arena"){
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
         def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
         def status_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
         status_str = line.substring(status_pos_1+1,status_pos_2)
-        if(type_str == '"LT-tilsagn' && status_str == "Godkjent"){
+        if(status_str == "Godkjent"){
             def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
             def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
             datestr = line.substring(date_pos_1+1,date_pos_2)
@@ -404,6 +433,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
     
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
         if(type_str == '"LT-refusjon'){
@@ -443,6 +473,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
         def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
@@ -485,6 +516,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
         def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
@@ -500,7 +532,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
             line = line.replaceAll('"',"")
             output = output + '\n' + line
             println "line to be added to output: " + line
-            println "output: " output
+            println "output: " + output
         }
     }
     outputFile.write(output)
@@ -529,6 +561,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
     
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
         def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
@@ -571,6 +604,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
         def type_pos_1 = line.indexOf(";")
         type_str = line.substring(0,type_pos_1)
         def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
@@ -612,7 +646,8 @@ else if(rule == "Tiltak_Manedlig"){
     // define header row for the file
     output="Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
     for(line in fileContents) {
-        def datestr = line.substring(19,29).trim()
+        line = line.replaceAll(",",".")
+        def datestr = line.substring(19,28).trim()
         def norwegianDateFormat = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Parsing with Norwegian locale
         def date
         try {
@@ -653,10 +688,25 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
     copyFileWithEncoding(src, dst, encoding)
-    
+
     // define header row for the file
     output="Dato;Referanse;Year;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
+        def belop1pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1
+        def belop1pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
+        def belop1 = line.substring(belop1pos1, belop1pos2).trim();
+        def belop2pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1
+        def belop2pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) +1)
+        def belop2 = line.substring(belop2pos1, belop2pos2).trim()
+        
+        
+        if(belop1 == null || belop1 == "" || belop2 == null || belop1 == ""){
+            def modifiedLine = line.split(';').collect { it ? it : "0" }.join(';')
+            println(modifiedLine)
+            line = modifiedLine
+        }
+
         datestr = line.substring(0,10)
         date = new SimpleDateFormat("dd-MM-yyyy").parse(datestr)
         newdate = new SimpleDateFormat("dd-MMM-yyyy").format(date)
@@ -709,6 +759,7 @@ else if(rule == "Grensesnitt"){
 
     // loop through each line in the file contents - each line is split using defined substring characters below
     for(line in fileContents) {
+        line = line.replaceAll(",",".")
         // check if it is a line we want to load or a header line we want to ignore
         if(line.substring(22,23) != " "){
             ref1 = line.substring(0,15)
@@ -770,7 +821,7 @@ else if(rule == "Grensesnitt_fag"){
         fileContents = filterNonEmptyLines(fileContents)
         
         for (line in fileContents) {
-
+            line = line.replaceAll(",",".")
             def date_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
             def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
             def datestr = line.substring(date_pos_1 + 1, date_pos_2)
