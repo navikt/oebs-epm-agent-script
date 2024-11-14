@@ -647,6 +647,17 @@ else if(rule == "Tiltak_Manedlig"){
     output="Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
     for(line in fileContents) {
         line = line.replaceAll(",",".")
+
+        //belop1 refererer til navnet i ARCS, i filen gjelder dette belop2
+        def belop1pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1
+        def belop1pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) +1)
+        def belop1 = line.substring(belop1pos1, belop1pos2).trim()
+        
+        if(!belop1 || belop1 == 0 || belop1 == "0"){
+            println "belop1: " + belop1
+           continue
+        }
+
         def datestr = line.substring(19,28).trim()
         def norwegianDateFormat = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Parsing with Norwegian locale
         def date
@@ -693,18 +704,14 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
     output="Dato;Referanse;Year;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
     for(line in fileContents) {
         line = line.replaceAll(",",".")
-        def belop1pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1
-        def belop1pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-        def belop1 = line.substring(belop1pos1, belop1pos2).trim();
-        def belop2pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1
-        def belop2pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) +1)
-        def belop2 = line.substring(belop2pos1, belop2pos2).trim()
+        //belop1 refererer til navnet i ARCS, i filen gjelder dette belop2
+        def belop1pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1
+        def belop1pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) +1)
+        def belop1 = line.substring(belop1pos1, belop1pos2).trim()
         
-        
-        if(belop1 == null || belop1 == "" || belop2 == null || belop1 == ""){
-            def modifiedLine = line.split(';').collect { it ? it : "0" }.join(';')
-            println(modifiedLine)
-            line = modifiedLine
+        if(!belop1 || belop1 == 0 || belop1 == "0"){
+            println "belop1: " + belop1
+           continue
         }
 
         datestr = line.substring(0,10)
