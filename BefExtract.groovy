@@ -625,7 +625,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     outputFile.write(output)
 }
 
-// 11. This block of code loads data from the Tiltakl Maanedlig_OEBS file
+// 11. This block of code loads data from the Tiltakl Maanedlig_OEBS files
 else if(rule == "Tiltak_Manedlig_OEBS"){
     locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
     destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/"
