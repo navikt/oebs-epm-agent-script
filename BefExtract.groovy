@@ -625,8 +625,8 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     outputFile.write(output)
 }
 
-// 11. This block of code loads data from the Tiltakl Maanedlig file
-else if(rule == "Tiltak_Manedlig"){
+// 11. This block of code loads data from the Tiltakl Maanedlig_OEBS file
+else if(rule == "Tiltak_Manedlig_OEBS"){
     locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
     destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/"
     filePath = ""
@@ -649,12 +649,12 @@ else if(rule == "Tiltak_Manedlig"){
         line = line.replaceAll(",",".")
 
         //belop1 refererer til navnet i ARCS, i filen gjelder dette belop2
-        def belop1pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1
-        def belop1pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) +1)
+        def belop1pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1
+        def belop1pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
         def belop1 = line.substring(belop1pos1, belop1pos2).trim()
-        
+
         if(!belop1 || belop1 == 0 || belop1 == "0"){
-            println "belop1: " + belop1
+            println "belop1 inside check: " + belop1
            continue
         }
 
@@ -679,8 +679,8 @@ else if(rule == "Tiltak_Manedlig"){
     outputFile.write(output)
 }
 
-// 12. This block of code loads data from the Manedlig_OEBS file
-else if(rule == "Tiltak_Manedlig_OEBS"){
+// 12. This block of code loads data from the Manedlig_Arena file
+else if(rule == "Tiltak_Manedlig"){
     locationPath = "/data/ar/dev/inbox/tiltak/maanedlig"
     destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/"
     filePath = ""
