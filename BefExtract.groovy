@@ -584,7 +584,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
 // 10. This block of code loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert
 else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Annullert"){
     locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkivAnnulert/"
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
