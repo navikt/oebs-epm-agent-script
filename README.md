@@ -24,8 +24,22 @@ Filer skal legges i mappen `inbox` denne mappen har forskjellige undermapper bas
 * **OracleGL filer** -> `OracleGL`
 * **Grensesnitt filer** -> `OB04_AR.dat`
 * **Grensesnitt fag filer** -> `familie-tilbake-p.csv`, `fptilbake-p.csv`,`k9-tilbake-p.csv`
-* **Tiltak daglig bestilling filer** -> `Tiltak_Daglig`
-* **Tiltak daglig faktura filer** -> `Tiltaksfaktura_Daglig`
-* fyll ut resten her
+* **Tiltak daglig og LT-daglig bestilling filer** -> `Tiltak_Daglig`
+* **Tiltak daglig faktura og LT-daglig filer** -> `Tiltaksfaktura_Daglig`
+* **Tiltak avstemming daglig filer og LT-daglig** -> `tiltak_avstemming_dag.csv`, `LT_tiltak_avstemming_dag.csv`
+* **Tiltak månedlig filer** -> `Tiltak_Maanedlig`, `tiltak_avstemming_mnd`
+* **LT-Tiltak mnd** -> Ikke implementert
 
 Når filen ligger i riktig mappe kan du gå inn i avstemmingsløsningen og trigge jobben for å laste data inn i **_Oracle EPM Account Reconciliation_** under **Datautveksling** og kjøre riktig jobb.
+
+### Jobber som skal kjøres for avstemmingstyper
+Disse navnene er hentet fra produksjon og kan avvike noe fra test, hvis du er usikker kan du sjekke regelnavnene for integrasjonene i `ACCREC` og sammenligne med funksjonene i `groovy scriptet`.
+
+Jobbene finner du ved å gå inn i applikasjonen, trykke på `dataintegrasjon -> datautveksling`
+
+* **Bank** -> **BANK_LOAD** og **OEBS_BANK_LOAD**
+* **Grensesnitt** -> **Grensesnitt_Fagsystem_Load** og **Grensesnitt_Sendt_Load**
+* **Tiltak daglig** -> **Tiltak_Tilsagn_ARENA1**, **Tiltak_RefKrav_Arena**, **Tiltak_Daglig_Bestilling1** og **Tiltak_Daglig_Faktura**
+* **Tiltak daglig annulertlinjer** -> **Daily Annullert - Tiltak_Tilsagn_Arena** denne er litt spesiell og er ikke 100% i bruk
+* **Tiltak månedlig** -> **Tiltak_Mnd_Arena1** og **Tiltak_Mnd_OeBS**
+* **LT-Tiltak** -> Ikke implementert
