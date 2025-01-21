@@ -452,43 +452,50 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
 
 //7. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert 
 else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/" 
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/annullert"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/annullert/arkiv/"
+    def matchingFiles = [] 
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
          file -> if(file.getName().contains("tiltak_avstemming_dag")){
             filePath = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+            matchingFiles << file
         }
     }
 
-    def fileContents = new File(filePath).newReader(encoding).readLines()
-    fileContents = filterNonEmptyLines(fileContents)
-    def src = new File(filePath)
-    def dst = new File(destLocation + fileName)
-    copyFileWithEncoding(src, dst, encoding)
+    if (matchingFiles.isEmpty()) {
+        println "No files matching the pattern found in the directory."
+        return
+    }
 
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
-    for(line in fileContents) {
-        line = line.replaceAll(",",".")
-        def type_pos_1 = line.indexOf(";")
-        type_str = line.substring(0,type_pos_1)
-        def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-        def status_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-        status_str = line.substring(status_pos_1+1,status_pos_2)
-        if(type_str == 'Tilsagn' && status_str == "Annullert"){
-            def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-            def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            datestr = line.substring(date_pos_1+1,date_pos_2)
-            date = new SimpleDateFormat("dd-MM-yyyy").parse(datestr)
-            newdate = new SimpleDateFormat("dd-MMM-yyyy").format(date)
-            line = line.replaceAll(datestr,newdate)
-            line = line.replaceAll('"',"")
-            output = output + '\n' + line + ";"
+    
+    matchingFiles.each { file ->
+        def fileContents = file.newReader(encoding).readLines()
+        fileContents = filterNonEmptyLines(fileContents)
+        
+        for(line in fileContents) {
+            line = line.replaceAll(",",".")
+            def type_pos_1 = line.indexOf(";")
+            type_str = line.substring(0,type_pos_1)
+            def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
+            def status_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
+            status_str = line.substring(status_pos_1+1,status_pos_2)
+            if(type_str == 'Tilsagn' && status_str == "Annullert"){
+                def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
+                def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
+                datestr = line.substring(date_pos_1+1,date_pos_2)
+                date = new SimpleDateFormat("dd-MM-yyyy").parse(datestr)
+                newdate = new SimpleDateFormat("dd-MMM-yyyy").format(date)
+                line = line.replaceAll(datestr,newdate)
+                line = line.replaceAll('"',"")
+                output = output + '\n' + line + ";"
+            }
         }
+
+        def dst = new File(destLocation + file.getName())
+        copyFileWithEncoding(file, dst, encoding)
     }
     outputFile.write(output)
 }
