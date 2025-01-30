@@ -813,7 +813,7 @@ else if(rule == "Grensesnitt_fag"){
     filePath = ""
     fileName = ""
     new File(locationPath).eachFile() { 
-        file -> if(file.getName().contains("tilbake-p")){
+        file -> if(file.getName().contains("tilbake-p") || file.getName().contains("navi")){
             filePath = file.getAbsolutePath()
             println "file path: " + filePath
             matchingFiles << file
