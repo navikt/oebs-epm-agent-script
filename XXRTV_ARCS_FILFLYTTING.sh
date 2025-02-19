@@ -93,7 +93,7 @@ process_tdnb_bank_files() {
         return
     fi
 
-    for FIL in "$SRC_BANK"/tdnb*.txt_D*; do
+    for FIL in "$SRC_BANK"/*tdnb*.txt_D*; do
         [[ -e "$FIL" ]] || continue
         local FILNAVN NYTT_NAVN TIMESTAMP
         FILNAVN=$(basename "$FIL")
@@ -105,17 +105,21 @@ process_tdnb_bank_files() {
             NYTT_NAVN="${TIMESTAMP}_${FILNAVN}"
         fi
 
-        if [ -f "$ARKIV_BANK/$FILNAVN" ]; then
+        if [[ "$ARKIV_BANK/$FILNAVN" =~ ^[0-9]+_ ]] || [ -f "$ARKIV_BANK/$FILNAVN" ]; then
             log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv."
-            stat -c '%i %n' "$FIL" "$ARKIV_BANK/$(basename "$FIL")"
-            cp -v "$FIL" "$ARKIV_BANK/$NYTT_NAVN"
             continue
         fi
 
         if [[ $(file_exists_in_remote "$FILNAVN" "$DEST_BANK" "$ARKIV_BANK_DEST") == "Eksisterer" ]]; then
-            output=$(cp -v "$FIL" "$ARKIV_BANK/$NYTT_NAVN" 2>&1)
             log_message "Fil $FILNAVN eksisterer allerede i $DEST_BANK eller $ARKIV_BANK_DEST på remote. Flytter til lokalt arkiv $ARKIV_BANK/$NYTT_NAVN. cp output: $output."
-            stat -c '%i %n' "$FIL" "$ARKIV_BANK/$(basename "$FIL")"
+            output=$(cp -v "$FIL" "$ARKIV_BANK/$NYTT_NAVN" 2>&1)
+            if [ $? -eq 0 ]; then
+                log_message "Arkiverte $FILNAVN til "$ARKIV_BANK/$NYTT_NAVN". cp output: $output."
+                rm -v "$FIL"
+            else
+                stat -c '%i %n' "$FIL" "$ARKIV_BANK/$(basename "$FIL")"
+                log_message "Feilet arkivering av fil $FILNAVN. cp feilet med status $status. Feilmelding: $output."
+            fi
             continue
         fi
 
@@ -175,19 +179,32 @@ process_gl_files() {
         return
     fi
 
-    for FIL in "$SRC_GL"/GL2BETTY-*--1.lst; do
+    for FIL in "$SRC_GL"/*GL2BETTY-*--1.lst; do
         [[ -e "$FIL" ]] || continue 
-        local FILNAVN
+        local FILNAVN NYTT_NAVN TIMESTAMP
         FILNAVN=$(basename "$FIL")
+        sleep 1
+        TIMESTAMP=$(date '+%Y%m%d%H%M%S')
+        if [[ "$FILNAVN" =~ ^[0-9]+_ ]]; then
+            NYTT_NAVN="${TIMESTAMP}_${FILNAVN#*_}"
+        else
+            NYTT_NAVN="${TIMESTAMP}_${FILNAVN}"
+        fi
 
-        if [ -f "$ARKIV_GL/$FILNAVN" ]; then
+        if [[ "$ARKIV_GL/$FILNAVN" =~ ^[0-9]+_ ]] || [ -f "$ARKIV_GL/$FILNAVN" ]; then
             log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv. Flyttes til arkivet."
             continue
         fi
 
         if [[ $(file_exists_in_remote "$FILNAVN" "$DEST_GL" "$ARKIV_GL_DEST") == "Eksisterer" ]]; then
             log_message "Fil $FILNAVN eksisterer allerede i $DEST_GL eller $ARKIV_GL_DEST på remote. Flytter til lokalt arkiv."
-            mv "$FIL" "$ARKIV_GL/"
+            output=$(cp -v "$FIL" "$ARKIV_GL/$NYTT_NAVN" 2>&1)
+            if [ $? -eq 0 ]; then
+                log_message "Arkiverte $FILNAVN til $ARKIV_GL."
+                rm -v "$FIL"
+            else
+                log_message "Feilet arkivering av $FILNAVN."
+            fi
             continue
         fi
 
@@ -204,9 +221,10 @@ process_gl_files() {
             continue
         fi
 
-        mv "$FIL" "$ARKIV_GL/"
+        output=$(cp -v "$FIL" "$ARKIV_GL/$NYTT_NAVN" 2>&1)
         if [ $? -eq 0 ]; then
             log_message "Arkiverte $FILNAVN til $ARKIV_GL."
+            rm -v "$FIL"
         else
             log_message "Feilet arkivering av $FILNAVN."
         fi
@@ -220,39 +238,46 @@ process_grensesnitt_files() {
     fi
 
     for FIL in "$SRC_GRENSESNITT"/{*tilbake-p*.csv,OB04*.DAT}; do
-         [[ -e "$FIL" ]] || continue
-         local FILNAVN
-         FILNAVN=$(basename "$FIL")
+        [[ -e "$FIL" ]] || continue
+        local FILNAVN
+        FILNAVN=$(basename "$FIL")
 
         if [ -f "$ARKIV_GRENSESNITT/$FILNAVN" ]; then
-              log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv. Flytter til arkivet."
-              continue
+            log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv. Flytter til arkivet."
+            continue
         fi
 
         if [[ $(file_exists_in_remote "$FILNAVN" "$DEST_GRENSESNITT" "$ARKIV_GRENSESNITT_DEST") == "Eksisterer" ]]; then
-              log_message "Fil $FILNAVN eksisterer allerede på remote i $DEST_GRENSESNITT eller $ARKIV_GRENSESNITT_DEST. Flytter til lokalt arkiv."
-              mv "$FIL" "$ARKIV_GRENSESNITT/"
-              continue
+            log_message "Fil $FILNAVN eksisterer allerede på remote i $DEST_GRENSESNITT eller $ARKIV_GRENSESNITT_DEST. Flytter til lokalt arkiv."
+            output=$(cp -v "$FIL" "$ARKIV_GRENSESNITT/$NYTT_NAVN" 2>&1)
+            if [ $? -eq 0 ]; then
+                log_message "Arkiverte $FILNAVN til $ARKIV_GRENSESNITT."
+                rm -v "$FIL"
+            else
+                log_message "Feilet arkivering av $FILNAVN."
+            fi
+            continue
         fi
 
         if [ ! -s "$FIL" ]; then
-              prosesser_0kb_fil "$FIL" "$ARKIV_GRENSESNITT" "$ARKIV_GRENSESNITT_DEST"
-              continue
-         fi
+            prosesser_0kb_fil "$FIL" "$ARKIV_GRENSESNITT" "$ARKIV_GRENSESNITT_DEST"
+            continue
+        fi
         
         scp -pC "$FIL" "$DEST_USER@$DEST_HOST:$DEST_GRENSESNITT/"
         if [ $? -eq 0 ]; then
-              log_message "Overført $FILNAVN til $DEST_USER@$DEST_HOST:$DEST_GRENSESNITT."
+            log_message "Overført $FILNAVN til $DEST_USER@$DEST_HOST:$DEST_GRENSESNITT."
         else
-              log_message "Feilet overføring av $FILNAVN til $DEST_USER@$DEST_HOST:$DEST_GRENSESNITT."
-              continue
+            log_message "Feilet overføring av $FILNAVN til $DEST_USER@$DEST_HOST:$DEST_GRENSESNITT."
+            continue
         fi
 
-        mv "$FIL" "$ARKIV_GRENSESNITT/"
+        output=$(cp -v "$FIL" "$ARKIV_GRENSESNITT/$NYTT_NAVN" 2>&1)
         if [ $? -eq 0 ]; then
-              log_message "Arkiverte $FILNAVN til $ARKIV_GRENSESNITT."
-         else
-              log_message "Feilet arkivering av $FILNAVN."
+            log_message "Arkiverte $FILNAVN til $ARKIV_GRENSESNITT."
+            rm -v "$FIL"
+        else
+            log_message "Feilet arkivering av $FILNAVN."
         fi
 
     done
