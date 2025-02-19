@@ -95,20 +95,27 @@ process_tdnb_bank_files() {
 
     for FIL in "$SRC_BANK"/tdnb*.txt_D*; do
         [[ -e "$FIL" ]] || continue
-        local FILNAVN
+        local FILNAVN NYTT_NAVN TIMESTAMP
         FILNAVN=$(basename "$FIL")
+        sleep 1
+        TIMESTAMP=$(date '+%Y%m%d%H%M%S')
+        if [[ "$FILNAVN" =~ ^[0-9]+_ ]]; then
+            NYTT_NAVN="${TIMESTAMP}_${FILNAVN#*_}"
+        else
+            NYTT_NAVN="${TIMESTAMP}_${FILNAVN}"
+        fi
 
         if [ -f "$ARKIV_BANK/$FILNAVN" ]; then
             log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv."
             stat -c '%i %n' "$FIL" "$ARKIV_BANK/$(basename "$FIL")"
-            mv -v "$FIL" "$ARKIV_BANK"
+            cp -v "$FIL" "$ARKIV_BANK/$NYTT_NAVN"
             continue
         fi
 
         if [[ $(file_exists_in_remote "$FILNAVN" "$DEST_BANK" "$ARKIV_BANK_DEST") == "Eksisterer" ]]; then
-            log_message "Fil $FILNAVN eksisterer allerede i $DEST_BANK eller $ARKIV_BANK_DEST på remote. Flytter til lokalt arkiv."
+            output=$(cp -v "$FIL" "$ARKIV_BANK/$NYTT_NAVN" 2>&1)
+            log_message "Fil $FILNAVN eksisterer allerede i $DEST_BANK eller $ARKIV_BANK_DEST på remote. Flytter til lokalt arkiv $ARKIV_BANK/$NYTT_NAVN. cp output: $output."
             stat -c '%i %n' "$FIL" "$ARKIV_BANK/$(basename "$FIL")"
-            mv "$FIL" "$ARKIV_BANK/"
             continue
         fi
 
@@ -125,12 +132,13 @@ process_tdnb_bank_files() {
             continue
         fi
 
-        mv -v "$FIL" "$ARKIV_BANK"
+        output=$(cp -v "$FIL" "$ARKIV_BANK/$NYTT_NAVN" 2>&1)
         if [ $? -eq 0 ]; then
-            log_message "Arkiverte $FILNAVN til $ARKIV_BANK."
+            log_message "Arkiverte $FILNAVN til "$ARKIV_BANK/$NYTT_NAVN". cp output: $output."
+            rm -v "$FIL"
         else
             stat -c '%i %n' "$FIL" "$ARKIV_BANK/$(basename "$FIL")"
-            log_message "Feilet arkivering av $FILNAVN."
+            log_message "Feilet arkivering av fil $FILNAVN. cp feilet med status $status. Feilmelding: $output."
         fi
 
     done
