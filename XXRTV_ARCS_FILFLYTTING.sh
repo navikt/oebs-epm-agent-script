@@ -291,7 +291,8 @@ process_tiltak_files() {
     log_message "Daglig Faktura"
     process_daglig_faktura_files
     log_message "Månedlig tiltak"
-}
+    process_manedlig_tiltak_files
+}   
 
 process_daglig_tiltak_files() {
     for REMOTE_DIR in "$DEST_TILSAGN" "$DEST_REFUSJON" "$DEST_ANNULLERT"; do
