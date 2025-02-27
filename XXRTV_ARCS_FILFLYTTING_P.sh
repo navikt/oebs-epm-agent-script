@@ -4,7 +4,7 @@ shopt -s nullglob
 
 ROOT_DIR="/app01/ARCS"
 DEST_ROOT_DIR="/data/ar/prod/inbox"
-LOGG_FIL="bank_overforing.log"
+LOGG_FIL="fil_overforing.log"
 DEST_USER="epmdrift"
 DEST_HOST="155.55.63.41"
 
