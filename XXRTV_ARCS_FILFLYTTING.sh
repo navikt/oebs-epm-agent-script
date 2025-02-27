@@ -493,10 +493,16 @@ process_manedlig_tiltak_files() {
          return
     fi
 
-    for FIL in "$SRC_TILTAK"/Tiltaksfaktura_Daglig*; do
+    for FIL in "$SRC_TILTAK"/{*_mnd.csv,Tiltak_Maanedlig*}; do
          [[ -e "$FIL" ]] || continue
          local FILNAVN NYTT_NAVN TIMESTAMP
          FILNAVN=$(basename "$FIL")
+
+        if [[ "$FILNAVN" == *_LT_* ]]; then
+            log_message "Hopper over fil $FILNAVN fordi den ikke skal prosesseres da det er en LT-fil."
+            continue
+        fi
+
          sleep 1
          TIMESTAMP=$(date '+%Y%m%d%H%M%S')
          if [[ "$FILNAVN" =~ ^[0-9]+_ ]]; then
