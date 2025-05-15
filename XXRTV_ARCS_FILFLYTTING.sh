@@ -1,10 +1,11 @@
 #!/bin/bash
 # Aktiver nullglob slik at ikke-matchende mønstre utvides til en tom liste i stedet for literal string
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 shopt -s nullglob
 
 ROOT_DIR="/app01/ARCS-Q"
 DEST_ROOT_DIR="/data/ar/dev/inbox"
-LOGG_FIL="fil_overforing.log"
+LOGG_FIL="/home/apploebsq1/ARCS/fil_overforing.log"
 DEST_USER="epmdrift"
 DEST_HOST="155.55.63.41"
 
