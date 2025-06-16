@@ -17,6 +17,11 @@ def outFileName = agentContext["DATAFILENAME"]
 outputFile = new File(outFileName)
 def String encoding = "ISO-8859-1"
 
+// Logging helpers
+def logInfo(msg)  { println "[EXTRACT][INFO]  ${msg}" }
+def logWarn(msg)  { println "[EXTRACT][WARN]  ${msg}" }
+def logError(msg) { println "[EXTRACT][ERROR] ${msg}" }
+
 // 1. this block of code is for the bank file. The if logic around each code block drives which files is transformed and loaded.
 if(rule == "BANK_LOAD") {
     long fullRunTimeStart = System.nanoTime()
@@ -26,10 +31,10 @@ if(rule == "BANK_LOAD") {
     fileName = ""
     def folder = new File(locationPath)
     if (!folder.exists()) {
-        println "Directory not found: " + locationPath
+        logError("Directory not found: ${locationPath}")
         return
     } else {
-        println "Directory found: " + locationPath
+        logInfo("Directory found: ${locationPath}")
     }
 
     folder.eachFile() {
@@ -37,17 +42,17 @@ if(rule == "BANK_LOAD") {
              filePath = file.getAbsolutePath()
              fileName = file.getName()
              fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
-             println "Selected file name: " + fileName
-             println "Selected file: " + filePath
-             println "Selected file from substring: " + fileNameFromPath
-             println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
+             logInfo("Selected file name: ${fileName}")
+             logInfo("Selected file: ${filePath}")
+             logInfo("Selected file from substring: ${fileNameFromPath}")
+             logInfo("File Path from substring: ${filePath.substring(filePath.lastIndexOf("/") + 1)}")
          }
       }
 
     // Check if a valid file was found
     if (filePath == "") {
-        println "No matching file found with 'tdnb' in its name."
-        return 
+        logError("No matching file found with 'tdnb' in its name.")
+        return
     }
 
     def file = new File(filePath)
@@ -87,8 +92,8 @@ if(rule == "BANK_LOAD") {
 
     long endTime = System.nanoTime()
     long duration = endTime - startTime
-    println "For loop executed in: " + (duration / 1_000_000) + " ms"
-    println "For loop executed in: " + (duration / 1_000_000_000.0) + " seconds"
+    logInfo("For loop executed in: " + (duration / 1_000_000) + " ms")
+    logInfo("For loop executed in: " + (duration / 1_000_000_000.0) + " seconds")
 
     // Write the result to the output file
     def myFile = new File(locationPath +'mySuperFile2.txt')
@@ -151,8 +156,8 @@ if(rule == "BANK_LOAD") {
 
     long endTime2 = System.nanoTime()
     long duration2 = endTime2 - startTime2
-    println "2nd For loop executed in: " + (duration2 / 1_000_000) + " ms"
-    println "2nd For loop executed in: " + (duration2 / 1_000_000_000.0) + " seconds"
+    logInfo("2nd For loop executed in: " + (duration2 / 1_000_000) + " ms")
+    logInfo("2nd For loop executed in: " + (duration2 / 1_000_000_000.0) + " seconds")
 
     def myFile1 = new File(locationPath + 'ARCSInput.txt')
     myFile1.withWriter(encoding) { writer ->
@@ -174,8 +179,8 @@ if(rule == "BANK_LOAD") {
 
     long endTime3 = System.nanoTime()
     long duration3 = endTime3 - startTime3
-    println "3rd For loop executed in: " + (duration3 / 1_000_000) + " ms"
-    println "3rd For loop executed in: " + (duration3 / 1_000_000_000.0) + " seconds"
+    logInfo("3rd For loop executed in: " + (duration3 / 1_000_000) + " ms")
+    logInfo("3rd For loop executed in: " + (duration3 / 1_000_000_000.0) + " seconds")
 
     def myFile2 = new File(locationPath + 'ARCSInput2.txt')
     myFile2.withWriter(encoding) { outputWriter ->
@@ -193,9 +198,9 @@ if(rule == "BANK_LOAD") {
     long fullDuration = fullRunTimeEnd - fullRunTimeStart
     def src = new File(filePath)
     def dst = new File(destLocation + fileName)
-    copyFileWithEncoding(src, dst, encoding)
-    println "Full runtime in: " + (fullDuration / 1_000_000) + " ms"
-    println "Full runtime in: " + (fullDuration / 1_000_000_000.0) + " seconds"
+    // copyFileWithEncoding(file, dst, encoding)
+    logInfo("Full runtime in: " + (fullDuration / 1_000_000) + " ms")
+    logInfo("Full runtime in: " + (fullDuration / 1_000_000_000.0) + " seconds")
 }
 
 //2. this block of code is for the OEBS bank file
@@ -210,10 +215,10 @@ else if(rule == "OEBS_BANK_LOAD"){
             filePath = file.getAbsolutePath()
             fileName = file.getName()
             fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println "Selected file name: " + fileName
-            println "Selected file: " + filePath
-            println "Selected file from substring: " + fileNameFromPath
-            println "File Path from substring: " + filePath.substring(filePath.lastIndexOf("/") + 1)
+            logInfo("Selected file name: ${fileName}")
+            logInfo("Selected file: ${filePath}")
+            logInfo("Selected file from substring: ${fileNameFromPath}")
+            logInfo("File Path from substring: ${filePath.substring(filePath.lastIndexOf("/") + 1)}")
             matchingFiles << file
         }
     }
@@ -222,7 +227,7 @@ else if(rule == "OEBS_BANK_LOAD"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
 
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -248,7 +253,7 @@ else if(rule == "OEBS_BANK_LOAD"){
             try {
                 date = norwegianDateFormat.parse(datestr)
             } catch (ParseException e) {
-                println "Error parsing date: ${e.message}"
+                logError("Error parsing date: ${e.message}")
             }
 
             def sdf = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Formatting with English locale
@@ -273,8 +278,8 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
          file -> if(file.getName().contains("Tiltak_Daglig")){
             filePath = file.getAbsolutePath()
             fileName = file.getName()
-            println "Selected file name: " + fileName
-            println "Selected file: " + filePath
+            logInfo("Selected file name: ${fileName}")
+            logInfo("Selected file: ${filePath}")
             matchingFiles << file
         }
     }
@@ -284,7 +289,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)   
+        // copyFileWithEncoding(file, dst, encoding)   
         
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -317,8 +322,8 @@ else if(rule == "Tiltak_Daglig_Faktura") {
         file -> if(file.getName().contains("Tiltaksfaktura_Daglig")){
             filePath = file.getAbsolutePath()
             fileName = file.getName()
-            println "Selected file name: " + fileName
-            println "Selected file: " + filePath
+            logInfo("Selected file name: ${fileName}")
+            logInfo("Selected file: ${filePath}")
             matchingFiles << file
         }
     }
@@ -348,7 +353,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
         }
     
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
         
         for(line in combinedLines) {
             line = line.replaceAll(",",".")
@@ -392,7 +397,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
 
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -437,7 +442,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)   
+        // copyFileWithEncoding(file, dst, encoding)   
         
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -501,7 +506,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
             }
         }
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
     }
     outputFile.write(output)
 }
@@ -517,8 +522,8 @@ else if(rule == "Tiltak_RefKrav_Arena"){
          file -> if(file.getName().contains("tiltak_avstemming_dag")){
             filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+            logInfo("Selected file: ${filePath}")
+            logInfo("Selected file from substring: ${fileName}")
             matchingFiles << file
          }
     }
@@ -527,7 +532,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
 
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -545,8 +550,8 @@ else if(rule == "Tiltak_RefKrav_Arena"){
                 line = line.replaceAll(datestr,newdate)
                 line = line.replaceAll('"',"")
                 output = output + '\n' + line
-                println "line to be added to output: " + line
-                println "output: " + output
+                logInfo("line to be added to output: ${line}")
+                logInfo("output: ${output}")
             }
         }
     }
@@ -564,8 +569,8 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
          file -> if(file.getName().contains("tiltak_avstemming_dag")){
             filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+            logInfo("Selected file: ${filePath}")
+            logInfo("Selected file from substring: ${fileName}")
             matchingFiles << file
          }
     }
@@ -574,7 +579,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
         
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -609,8 +614,8 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
          file -> if(file.getName().contains("Tiltak_Maanedlig")){
             filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+            logInfo("Selected file: ${filePath}")
+            logInfo("Selected file from substring: ${fileName}")
             matchingFiles << file
         }
     }
@@ -630,7 +635,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
             def belop1 = line.substring(belop1pos1, belop1pos2).trim()
 
             if(!belop1 || belop1 == 0 || belop1 == "0"){
-                println "belop1 inside check: " + belop1
+                logInfo("belop1 inside check: ${belop1}")
             continue
             }
 
@@ -640,7 +645,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
             try {
                 date = norwegianDateFormat.parse(datestr)
             } catch (ParseException e) {
-                println "Error parsing date: ${e.message}"
+                logError("Error parsing date: ${e.message}")
             }
             def sdf = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Formatting with English locale
             def newdate = sdf.format(date)
@@ -649,7 +654,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
             output = output +'\n' + line
         }
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
     }
     outputFile.write(output)
 }
@@ -665,8 +670,8 @@ else if(rule == "Tiltak_Manedlig"){
          file -> if(file.getName().contains("tiltak_avstemming_mnd")){
             filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+            logInfo("Selected file: ${filePath}")
+            logInfo("Selected file from substring: ${fileName}")
             matchingFiles << file
         }
     }
@@ -677,7 +682,7 @@ else if(rule == "Tiltak_Manedlig"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
         
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -687,7 +692,7 @@ else if(rule == "Tiltak_Manedlig"){
             def belop1 = line.substring(belop1pos1, belop1pos2).trim()
             
             if(!belop1 || belop1 == 0 || belop1 == "0"){
-                println "belop1: " + belop1
+                logInfo("belop1: ${belop1}")
             continue
             }
 
@@ -712,8 +717,8 @@ else if(rule == "Grensesnitt"){
         file -> if(file.getName().contains("OB04")){
             filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
+            logInfo("Selected file: ${filePath}")
+            logInfo("Selected file from substring: ${fileName}")
             matchingFiles << file
         }
     }
@@ -722,7 +727,7 @@ else if(rule == "Grensesnitt"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        // copyFileWithEncoding(file, dst, encoding)
 
         // define header row for the file and set the comma-delimited output headers for the output file
         def ref1 = ""
@@ -788,13 +793,13 @@ else if(rule == "Grensesnitt_fag"){
     new File(locationPath).eachFile() { 
         file -> if(file.getName().contains("tilbake-p") || file.getName().contains("navi")){
             filePath = file.getAbsolutePath()
-            println "file path: " + filePath
+            logInfo("file path: ${filePath}")
             matchingFiles << file
         }
     }
 
     if (matchingFiles.isEmpty()) {
-        println "No files matching the pattern found in the directory."
+        logError("No files matching the pattern found in the directory.")
         return
     }
 
@@ -803,7 +808,7 @@ else if(rule == "Grensesnitt_fag"){
 
     matchingFiles.each { file ->
         def fileContents = file.newReader(encodingFag).readLines()
-        println "File header: " + fileContents.get(1)
+        logInfo("File header: ${fileContents.get(1)}")
         fileContents = fileContents.drop(1)
         fileContents = filterNonEmptyLines(fileContents)
         
@@ -819,7 +824,7 @@ else if(rule == "Grensesnitt_fag"){
         }
 
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encodingFag)
+        // copyFileWithEncoding(file, dst, encodingFag)
     }
     outputFile.write(output)
 }
