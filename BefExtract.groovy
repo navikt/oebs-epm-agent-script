@@ -196,9 +196,9 @@ if(rule == "BANK_LOAD") {
 
     long fullRunTimeEnd = System.nanoTime()
     long fullDuration = fullRunTimeEnd - fullRunTimeStart
-    def src = new File(filePath)
+    def file = new File(filePath)
     def dst = new File(destLocation + fileName)
-    // copyFileWithEncoding(file, dst, encoding)
+    copyFileWithEncoding(file, dst, encoding)
     logInfo("Full runtime in: " + (fullDuration / 1_000_000) + " ms")
     logInfo("Full runtime in: " + (fullDuration / 1_000_000_000.0) + " seconds")
 }
@@ -227,7 +227,7 @@ else if(rule == "OEBS_BANK_LOAD"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
 
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -289,7 +289,7 @@ else if(rule == "Tiltak_Daglig_Bestilling") {
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)   
+        copyFileWithEncoding(file, dst, encoding)   
         
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -353,7 +353,7 @@ else if(rule == "Tiltak_Daglig_Faktura") {
         }
     
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
         
         for(line in combinedLines) {
             line = line.replaceAll(",",".")
@@ -397,7 +397,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
 
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -442,7 +442,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)   
+        copyFileWithEncoding(file, dst, encoding)   
         
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -506,7 +506,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
             }
         }
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
     }
     outputFile.write(output)
 }
@@ -532,7 +532,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
 
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -579,7 +579,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
         
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -654,7 +654,7 @@ else if(rule == "Tiltak_Manedlig_OEBS"){
             output = output +'\n' + line
         }
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
     }
     outputFile.write(output)
 }
@@ -682,7 +682,7 @@ else if(rule == "Tiltak_Manedlig"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
         
         for(line in fileContents) {
             line = line.replaceAll(",",".")
@@ -727,7 +727,7 @@ else if(rule == "Grensesnitt"){
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encoding)
+        copyFileWithEncoding(file, dst, encoding)
 
         // define header row for the file and set the comma-delimited output headers for the output file
         def ref1 = ""
@@ -824,7 +824,7 @@ else if(rule == "Grensesnitt_fag"){
         }
 
         def dst = new File(destLocation + file.getName())
-        // copyFileWithEncoding(file, dst, encodingFag)
+        copyFileWithEncoding(file, dst, encodingFag)
     }
     outputFile.write(output)
 }
