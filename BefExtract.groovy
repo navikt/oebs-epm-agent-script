@@ -392,7 +392,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT"){
             matchingFiles << file
         }
     }   
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
+    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
     matchingFiles.each { file-> 
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
@@ -437,7 +437,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
             matchingFiles << file
         }
     }
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
+    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
     matchingFiles.each { file->
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
