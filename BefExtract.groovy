@@ -438,29 +438,29 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
         }
     }
     output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
-    matchingFiles.each { file->
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
-        def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)   
-        
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            def type_pos_1 = line.indexOf(";")
-            type_str = line.substring(0,type_pos_1)
-            if(type_str == "LT-refusjon"){
-                def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-                def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-                datestr = line.substring(date_pos_1+1,date_pos_2)
-                date = new Date().parse("yyyy-MM-dd", datestr)
-                newdate = date.format("dd-MMM-yyyy")
-                line = line.replaceAll(datestr,newdate)
-                line = line.replaceAll('"',"")
-                output = output + '\n' + line + ";"
-            }
+matchingFiles.each { file->
+    def fileContents = file.newReader(encoding).readLines()
+    fileContents = filterNonEmptyLines(fileContents)
+    def dst = new File(destLocation + file.getName())
+    copyFileWithEncoding(file, dst, encoding)
+
+    for(line in fileContents) {
+        line = line.replaceAll(",",".")
+        def type_pos_1 = line.indexOf(";")
+        type_str = line.substring(0,type_pos_1)
+        if(type_str == "LT-refusjon"){
+            def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
+            def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
+            datestr = line.substring(date_pos_1+1,date_pos_2)
+            date = new Date().parse("yyyy-MM-dd", datestr)
+            newdate = date.format("dd-MMM-yyyy")
+            line = line.replaceAll(datestr,newdate)
+            line = line.replaceAll('"',"")
+            output = output + '\n' + line + ";"
         }
     }
-    outputFile.write(output)
+}
+outputFile.write(output)
 }
 
 //7. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert 
