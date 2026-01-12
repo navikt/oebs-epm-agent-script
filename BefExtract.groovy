@@ -196,7 +196,7 @@ if(rule == "BANK_LOAD") {
 
     long fullRunTimeEnd = System.nanoTime()
     long fullDuration = fullRunTimeEnd - fullRunTimeStart
-    def file = new File(filePath)
+    //def file = new File(filePath)
     def dst = new File(destLocation + fileName)
     copyFileWithEncoding(file, dst, encoding)
     logInfo("Full runtime in: " + (fullDuration / 1_000_000) + " ms")
@@ -378,8 +378,8 @@ else if(rule == "Tiltak_Daglig_Faktura") {
 
 //5. This block of code loads the LT tiltak avstemming daglig file loading only rows with type LT-tilsagn and status of Godkjent
 else if(rule == "Tiltak_Tilsagn_Arena_LT"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/arkiv/"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/LT/tilsagn"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/LT/tilsagn/arkiv/"
     filePath = ""
     fileName = ""
     matchingFiles = []
@@ -392,7 +392,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT"){
             matchingFiles << file
         }
     }   
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
+    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopenummer"
     matchingFiles.each { file-> 
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
@@ -414,7 +414,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT"){
                 newdate = date.format("dd-MMM-yyyy")
                 line = line.replaceAll(datestr,newdate)
                 line = line.replaceAll('"',"")
-                output = output + '\n' + line + ";"
+                output = output + '\n' + line + ";;"
             }
         }
     }
@@ -423,8 +423,8 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT"){
 
 //6. This code block loads the LT tiltak avstemming daglig file loading only rows with type LT-refusjon
 else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/"
+    locationPath = "/data/ar/dev/inbox/tiltak/daglig/LT/refusjon"
+    destLocation = "/data/ar/dev/inbox/tiltak/daglig/LT/refusjon/arkiv/"
     filePath = ""
     fileName = ""
     matchingFiles = []
@@ -527,7 +527,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
             matchingFiles << file
          }
     }
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
+    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
     matchingFiles.each { file-> 
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
@@ -574,7 +574,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
             matchingFiles << file
          }
     }
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
+    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
     matchingFiles.each { file ->
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
