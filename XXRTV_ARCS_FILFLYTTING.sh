@@ -31,18 +31,27 @@ ARKIV_GRENSESNITT_DEST="$DEST_GRENSESNITT/arkiv"
 #Tiltak
 SRC_TILTAK="$ROOT_DIR/Tiltak"
 ARKIV_TILTAK="$SRC_TILTAK/Arkiv"
+
 #Tiltak Daglig
 DEST_TILTAK_DAGLIG="$DEST_ROOT_DIR/tiltak/daglig"
 ARKIV_TILTAK_DAGLIG_DEST="$DEST_TILTAK_DAGLIG/arkiv"
 DEST_TILSAGN="$DEST_TILTAK_DAGLIG/arena/tilsagn"
 DEST_TILSAGN_ARKIV="$DEST_TILSAGN/arkiv"
 DEST_REFUSJON="$DEST_TILTAK_DAGLIG/arena/refusjon"
-DEST_REFUSJON_ARKIV="$DEST_REFUSJON"
+DEST_REFUSJON_ARKIV="$DEST_REFUSJON/arkiv"
 DEST_ANNULLERT="$DEST_TILTAK_DAGLIG/arena/tilsagn/annullert"
 DEST_ANNULLERT_ARKIV="$DEST_ANNULLERT/arkiv"
+
 # Tiltak Maanedlig
 DEST_TILTAK_MAANEDLIG="$DEST_ROOT_DIR/tiltak/maanedlig"
 ARKIV_TILTAK_MAANEDLIG_DEST="$DEST_TILTAK_MAANEDLIG/arkiv"
+
+# Tiltak Daglig LT
+DEST_TILTAK_DAGLIG_LT="$DEST_ROOT_DIR/tiltak/daglig/LT"
+DEST_TILSAGN_LT="$DEST_TILTAK_DAGLIG_LT/tilsagn"
+DEST_REFUSJON_LT="$DEST_TILTAK_DAGLIG_LT/refusjon"
+ARKIV_TILSAGN_LT_ARKIV="$DEST_TILSAGN_LT/arkiv"
+ARKIV_REFUSJON_LT_ARKIV="$DEST_REFUSJON_LT/arkiv"
 
 log_message() {
     local DATO
@@ -293,6 +302,8 @@ process_tiltak_files() {
     process_daglig_faktura_files
     log_message "Månedlig tiltak"
     process_manedlig_tiltak_files
+    log_message "Daglig tiltak LT"
+    process_daglig_tiltak_LT_files
 }   
 
 process_daglig_tiltak_files() {
@@ -312,6 +323,7 @@ process_daglig_tiltak_files() {
             log_message "Hopper over fil $FILNAVN fordi den ikke skal prosesseres da det er en LT-fil."
             continue
         fi
+
         sleep 1
         TIMESTAMP=$(date '+%Y%m%d%H%M%S')
         if [[ "$FILNAVN" =~ ^[0-9]+_ ]]; then
@@ -372,119 +384,81 @@ process_daglig_tiltak_files() {
     done
 }
 
-process_daglig_bestilling_files() { 
-    if ! ssh "$DEST_USER@$DEST_HOST" "[ -d '$DEST_TILTAK_DAGLIG' ]"; then
-         log_message "Mappen $DEST_TILTAK_DAGLIG eksisterer ikke på $DEST_HOST."
-         return
-    fi
-
-    for FIL in "$SRC_TILTAK"/Tiltak_Daglig*; do
-         [[ -e "$FIL" ]] || continue
-         local FILNAVN NYTT_NAVN TIMESTAMP
-         FILNAVN=$(basename "$FIL")
-         sleep 1
-         TIMESTAMP=$(date '+%Y%m%d%H%M%S')
-         if [[ "$FILNAVN" =~ ^[0-9]+_ ]]; then
-              NYTT_NAVN="${TIMESTAMP}_${FILNAVN#*_}"
-         else
-              NYTT_NAVN="${TIMESTAMP}_${FILNAVN}"
-         fi
-
-         if [ -f "$ARKIV_TILTAK/$FILNAVN" ]; then
-              log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv. Hopper over filen."
-              continue
-         fi
-
-         if [ ! -s "$FIL" ]; then
-              prosesser_0kb_fil "$FIL" "$ARKIV_TILTAK" "$ARKIV_TILTAK_DAGLIG_DEST"
-              continue
-         fi
-
-         if [[ $(file_exists_in_remote "$FILNAVN" "$DEST_TILTAK_DAGLIG" "$ARKIV_TILTAK_DAGLIG_DEST") == "Eksisterer" ]]; then
-              log_message "Fil $FILNAVN eksisterer allerede på remote i $DEST_TILTAK_DAGLIG eller $ARKIV_TILTAK_DAGLIG_DEST. Flytter til lokalt arkiv."
-              output=$(cp -v "$FIL" "$ARKIV_TILTAK/$NYTT_NAVN" 2>&1)
-              if [ $? -eq 0 ]; then
-                   log_message "Arkiverte $FILNAVN til $ARKIV_TILTAK med nytt navn $NYTT_NAVN. cp output: $output."
-                   rm -v "$FIL"
-              else
-                   log_message "Feilet arkivering av fil $FILNAVN. cp feilet med status $? Feilmelding: $output."
-              fi
-              continue
-         fi
-
-         scp -pC "$FIL" "$DEST_USER@$DEST_HOST:$DEST_TILTAK_DAGLIG/"
-         if [ $? -eq 0 ]; then
-              log_message "Overførte $FILNAVN til $DEST_USER@$DEST_HOST:$DEST_TILTAK_DAGLIG."
-         else
-              log_message "Feilet overføring av $FILNAVN til $DEST_USER@$DEST_HOST:$DEST_TILTAK_DAGLIG."
-              continue
-         fi
-
-         output=$(cp -v "$FIL" "$ARKIV_TILTAK/$NYTT_NAVN" 2>&1)
-         if [ $? -eq 0 ]; then
-              log_message "Arkiverte $FILNAVN til $ARKIV_TILTAK med nytt navn $NYTT_NAVN. cp output: $output."
-              rm -v "$FIL"
-         else
-              log_message "Feilet arkivering av fil $FILNAVN. cp feilet med status $? Feilmelding: $output."
-         fi
+process_daglig_tiltak_LT_files() {
+    for REMOTE_DIR in "$DEST_TILSAGN_LT" "$DEST_REFUSJON_LT"; do
+        if ! ssh "$DEST_USER@$DEST_HOST" "[ -d '$REMOTE_DIR' ]"; then
+            log_message "log_message Mappen $REMOTE_DIR eksisterer ikke på $DEST_HOST. Hopper over daglig tiltak LT filer."
+            return
+        fi
     done
-}
 
-process_daglig_faktura_files() {
-    if ! ssh "$DEST_USER@$DEST_HOST" "[ -d '$DEST_TILTAK_DAGLIG' ]"; then
-         log_message "Mappen $DEST_TILTAK_DAGLIG eksisterer ikke på $DEST_HOST."
-         return
-    fi
+    # FIKS (1): plukk kun LT-filer
+    for FIL in "$SRC_TILTAK"/*_LT_*_dag.csv; do
+        [[ -e "$FIL" ]] || continue
+        local FILNAVN NYTT_NAVN TIMESTAMP
+        FILNAVN=$(basename "$FIL")
 
-    for FIL in "$SRC_TILTAK"/Tiltaksfaktura_Daglig*; do
-         [[ -e "$FIL" ]] || continue
-         local FILNAVN NYTT_NAVN TIMESTAMP
-         FILNAVN=$(basename "$FIL")
-         sleep 1
-         TIMESTAMP=$(date '+%Y%m%d%H%M%S')
-         if [[ "$FILNAVN" =~ ^[0-9]+_ ]]; then
-              NYTT_NAVN="${TIMESTAMP}_${FILNAVN#*_}"
-         else
-              NYTT_NAVN="${TIMESTAMP}_${FILNAVN}"
-         fi
+        # FIKS (4): ekstra sikkerhet – hvis noen filer ikke matcher forventet LT-mønster
+        if [[ "$FILNAVN" != *_LT_* ]]; then
+            log_message "Hopper over fil $FILNAVN i LT-jobb (ikke LT)."
+            continue
+        fi
 
-         if [ -f "$ARKIV_TILTAK/$FILNAVN" ]; then
-              log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv. Hopper over filen."
-              continue
-         fi
+        sleep 1
+        TIMESTAMP=$(date '+%Y%m%d%H%M%S')
+        if [[ "$FILNAVN" =~ ^[0-9]+_ ]]; then
+            NYTT_NAVN="${TIMESTAMP}_${FILNAVN#*_}"
+        else
+            NYTT_NAVN="${TIMESTAMP}_${FILNAVN}"
+        fi
 
-         if [ ! -s "$FIL" ]; then
-              prosesser_0kb_fil "$FIL" "$ARKIV_TILTAK" "$ARKIV_TILTAK_DAGLIG_DEST"
-              continue
-         fi
+        if [ -f "$ARKIV_TILTAK/$FILNAVN" ]; then
+            log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv. Hopper over filen."
+            continue
+        fi
 
-         if [[ $(file_exists_in_remote "$FILNAVN" "$DEST_TILTAK_DAGLIG" "$ARKIV_TILTAK_DAGLIG_DEST") == "Eksisterer" ]]; then
-              log_message "Fil $FILNAVN eksisterer allerede på remote i $DEST_TILTAK_DAGLIG eller $ARKIV_TILTAK_DAGLIG_DEST. Flytter til lokalt arkiv."
-              output=$(cp -v "$FIL" "$ARKIV_TILTAK/$NYTT_NAVN" 2>&1)
-              if [ $? -eq 0 ]; then
-                   log_message "Arkiverte $FILNAVN til $ARKIV_TILTAK med nytt navn $NYTT_NAVN. cp output: $output."
-                   rm -v "$FIL"
-              else
-                   log_message "Feilet arkivering av fil $FILNAVN. cp feilet med status $? Feilmelding: $output."
-              fi
-              continue
-         fi
+        if [ ! -s "$FIL" ]; then
+            prosesser_0kb_fil "$FIL" "$ARKIV_TILTAK" "$ARKIV_TILSAGN_LT_ARKIV"
+            prosesser_0kb_fil "$FIL" "$ARKIV_TILTAK" "$ARKIV_REFUSJON_LT_ARKIV"
+            continue
+        fi
 
-         scp -pC "$FIL" "$DEST_USER@$DEST_HOST:$DEST_TILTAK_DAGLIG/"
-         if [ $? -eq 0 ]; then
-              log_message "Overførte $FILNAVN til $DEST_USER@$DEST_HOST:$DEST_TILTAK_DAGLIG."
-         else
-              log_message "Feilet overføring av $FILNAVN til $DEST_USER@$DEST_HOST:$DEST_TILTAK_DAGLIG."
-              continue
-         fi
+        local all_transfers_successful=1
 
-         output=$(cp -v "$FIL" "$ARKIV_TILTAK/$NYTT_NAVN" 2>&1)
-         if [ $? -eq 0 ]; then
-              log_message "Arkiverte $FILNAVN til $ARKIV_TILTAK med nytt navn $NYTT_NAVN. cp output: $output."
-              rm -v "$FIL"
-         else
-              log_message "Feilet arkivering av fil $FILNAVN. cp feilet med status $? Feilmelding: $output."
-         fi
+        # Definer arrays for remote-destinasjoner og tilhørende arkiv
+        remote_dirs=( "$DEST_TILSAGN_LT" "$DEST_REFUSJON_LT")
+        remote_archives=( "$ARKIV_TILSAGN_LT_ARKIV" "$ARKIV_REFUSJON_LT_ARKIV")
+
+        # Loop gjennom indeksene i arrayene
+        for i in "${!remote_dirs[@]}"; do
+            REMOTE_DIR="${remote_dirs[$i]}"
+            REMOTE_ARKIV="${remote_archives[$i]}"
+
+            if [[ $(file_exists_in_remote "$FILNAVN" "$REMOTE_DIR" "$REMOTE_ARKIV") == "Eksisterer" ]]; then
+                log_message "Fil $FILNAVN eksisterer allerede på remote i $REMOTE_DIR eller $REMOTE_ARKIV."
+            else
+                scp -pC "$FIL" "$DEST_USER@$DEST_HOST:$REMOTE_DIR/"
+                if [ $? -eq 0 ]; then
+                    log_message "Overførte $FILNAVN til $DEST_USER@$DEST_HOST:$REMOTE_DIR."
+                else
+                    log_message "Kunne ikke overføre $FILNAVN til $DEST_USER@$DEST_HOST:$REMOTE_DIR."
+                    all_transfers_successful=0
+                fi
+            fi
+        done
+
+
+        if [ $all_transfers_successful -eq 1 ]; then
+            output=$(cp -v "$FIL" "$ARKIV_TILTAK/$NYTT_NAVN" 2>&1)
+            if [ $? -eq 0 ]; then
+                log_message "Arkiverte $FILNAVN til $ARKIV_TILTAK. cp output: $output."
+                rm -v "$FIL"
+            else
+                log_message "Feilet arkivering av fil $FILNAVN. cp feilet med status $all_transfers_successful. Feilmelding: $output."
+            fi
+        else
+            log_message "Feilet overføring av fil $FILNAVN. cp feilet med status $all_transfers_successful. Feilmelding: $output."
+        fi
     done
 }
 
