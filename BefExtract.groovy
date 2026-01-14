@@ -384,7 +384,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT"){
     fileName = ""
     matchingFiles = []
     new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("LT_tiltak_avstemming_dag")){
+         file -> if(file.getName().contains("LT_tiltak_avstemming_dag") || file.getName().contains("TILSAGN")){
             filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
@@ -429,7 +429,7 @@ else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
     fileName = ""
     matchingFiles = []
     new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("LT_tiltak_avstemming_dag")){
+         file -> if(file.getName().contains("LT_tiltak_avstemming_dag")|| file.getName().contains("REFUSJON")){
             filePath = file.getAbsolutePath()
             fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
             println filePath
@@ -527,7 +527,7 @@ else if(rule == "Tiltak_RefKrav_Arena"){
             matchingFiles << file
          }
     }
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
+    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     matchingFiles.each { file-> 
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
@@ -574,7 +574,7 @@ else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
             matchingFiles << file
          }
     }
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
+    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
     matchingFiles.each { file ->
         def fileContents = file.newReader(encoding).readLines()
         fileContents = filterNonEmptyLines(fileContents)
