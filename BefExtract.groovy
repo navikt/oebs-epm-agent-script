@@ -21,6 +21,160 @@ def String encoding = "ISO-8859-1"
 def logInfo(msg)  { println "[EXTRACT][INFO]  ${msg}" }
 def logWarn(msg)  { println "[EXTRACT][WARN]  ${msg}" }
 def logError(msg) { println "[EXTRACT][ERROR] ${msg}" }
+// 0. Camt.053
+if(rule == "CAMT053_LOAD"){
+    locationPath = "/data/ar/dev/inbox/camt053/"
+    destLocation = "/data/ar/dev/inbox/camt053/arkiv/"
+    filePath = ""
+    fileName = ""
+    def matchingFiles = []
+    new File(locationPath).eachFile() {
+         file -> if(file.getName().contains("camt053")){
+            filePath = file.getAbsolutePath()
+            fileName = file.getName()
+            fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+            logInfo("Selected file name: ${fileName}")
+            logInfo("Selected file: ${filePath}")
+            logInfo("Selected file from substring: ${fileNameFromPath}")
+            logInfo("File Path from substring: ${filePath.substring(filePath.lastIndexOf("/") + 1)}")
+            matchingFiles << file
+        }
+    }
+
+    // CSV header - kan tilpasses ARCS krav
+    output = "KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5"
+
+    matchingFiles.each { file->
+        logInfo("Processing CAMT053 file: ${file.getName()}")
+
+        // Parse XML med XmlSlurper - effektivt for store filer
+        def xml = new XmlSlurper().parse(file)
+
+        // Hent kundenummer fra GrpHdr (hvis tilgjengelig)
+        def kundeNummer = xml.BkToCstmrStmt.GrpHdr.MsgRcpt.Id.OrgId.Othr.find { it.SchmeNm.Cd == 'CUST' }?.Id?.text() ?: ""
+        logInfo("Kundenummer: ${kundeNummer}")
+
+        // 1. TODO: finn <Stmt> og hent ut <IBAN> tag for å få kontonummeret
+        // VIKTIG: Loop gjennom hver Stmt for å få riktig IBAN for hver konto
+        def stmtCount = 0
+        xml.BkToCstmrStmt.Stmt.each { stmt ->
+            stmtCount++
+
+            // Hent IBAN for denne spesifikke Stmt
+            def ibanFull = stmt.Acct.Id.IBAN.text()
+            // Fjern landskode (NO) + 2 første sifre (totalt 4 tegn)
+            def iban = ibanFull.length() > 4 ? ibanFull.substring(4) : ibanFull
+            logInfo("Processing Statement #${stmtCount} - IBAN: ${ibanFull} -> ${iban}")
+
+            // Hent valutakode for denne Stmt
+            def currency = stmt.Acct.Ccy.text()
+            logInfo("Currency: ${currency}")
+
+            // 2. TODO: finn <TxsSummry> og hent <NbOfNtries> for antall transaksjoner
+            def nbOfEntries = stmt.TxsSummry.TtlNtries.NbOfNtries.text()
+            logInfo("Number of entries in statement: ${nbOfEntries}")
+
+            // 3. TODO: Loop gjennom hver <Ntry> transaksjon i denne Stmt
+            stmt.Ntry.each { ntry ->
+
+            // Hent grunnleggende transaksjonsdata
+            def amount = ntry.Amt.text()
+            def amountCcy = ntry.Amt.@Ccy.text()
+            def cdtDbtInd = ntry.CdtDbtInd.text() // CRDT (Credit) eller DBIT (Debit)
+            def bookingDate = ntry.BookgDt.Dt.text()
+            def valueDate = ntry.ValDt.Dt.text()
+            def ntryRef = ntry.NtryRef.text()
+            def acctSvcrRef = ntry.AcctSvcrRef.text()
+
+            // Konverter beløp til øre (multipliser med 100)
+            def belopOre = ""
+            try {
+                def belopDecimal = new BigDecimal(amount)
+                belopOre = (belopDecimal * 100).setScale(0, BigDecimal.ROUND_HALF_UP).toString()
+            } catch (Exception e) {
+                logWarn("Could not convert amount to øre: ${amount}")
+                belopOre = amount
+            }
+
+            // Initialiser output-felt
+            def content1 = ""
+            def content2 = ""
+            def content3 = ""
+            def content4 = ""
+            def content5 = ""
+
+            // 4. TODO: Hent detaljer fra <NtryDtls> -> <TxDtls>
+            ntry.NtryDtls.TxDtls.each { txDtls ->
+
+                // Hent referanser fra <Refs>
+                def txId = txDtls.Refs.TxId.text()
+                def clrSysRef = txDtls.Refs.ClrSysRef.text() // KID nummer
+                def txAcctSvcrRef = txDtls.Refs.AcctSvcrRef.text()
+
+                // content1: KID nummer / ClrSysRef eller TxId
+                content1 = clrSysRef ?: txId ?: txAcctSvcrRef
+
+                // content2: Remittance Information (betalingsinformasjon)
+                // Fra <RmtInf> -> <Ustrd> (Unstructured remittance info)
+                content2 = txDtls.RmtInf.Ustrd.text()
+
+                // 5. TODO: Sjekk om debit eller credit og hent riktige felt for content3
+                // For CREDIT transaksjoner: Hent Debtor name (hvem som betalte oss)
+                // For DEBIT transaksjoner: Hent Creditor name (hvem vi betalte til)
+                def dbtrName = txDtls.RltdPties.Dbtr.Nm.text()
+                def cdtrName = txDtls.RltdPties.Cdtr.Nm.text()
+
+                if (cdtDbtInd == "CRDT") {
+                    // Credit - vi mottok penger
+                    content3 = dbtrName
+                    // Debitor konto
+                    def dbtrAcct = txDtls.RltdPties.DbtrAcct.Id.Othr.Id.text()
+                    content4 = dbtrAcct
+                } else if (cdtDbtInd == "DBIT") {
+                    // Debit - vi betalte ut penger
+                    content3 = cdtrName
+                    // Kreditor konto
+                    def cdtrAcct = txDtls.RltdPties.CdtrAcct.Id.Othr.Id.text()
+                    content4 = cdtrAcct
+                }
+
+                // content5: Transaction Type/Code (valgfritt)
+                def txDomain = ntry.BkTxCd.Domn.Cd.text()
+                def txFamily = ntry.BkTxCd.Domn.Fmly.Cd.text()
+                content5 = "${txDomain}/${txFamily}/${cdtDbtInd}"
+
+                // Bygg CSV linje
+                // Format: KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5
+                def csvLine = "${kundeNummer},${iban},${amountCcy},${bookingDate},${belopOre},${amount},${content1},${content2},${content3},${content4},${content5}"
+                output = output + '\n' + csvLine
+
+                logInfo("Processed entry: Date=${bookingDate}, Amount=${amount} ${amountCcy}, Type=${cdtDbtInd}, Ref=${content1}")
+            }
+
+            // Hvis ingen TxDtls, lag en linje med Ntry-nivå data
+            if (ntry.NtryDtls.TxDtls.size() == 0) {
+                content5 = cdtDbtInd
+                def csvLine = "${kundeNummer},${iban},${amountCcy},${bookingDate},${belopOre},${amount},${ntryRef},${acctSvcrRef},,,${content5}"
+                output = output + '\n' + csvLine
+                logInfo("Processed entry (no TxDtls): Date=${bookingDate}, Amount=${amount} ${amountCcy}, Type=${cdtDbtInd}")
+            }
+        } // End of Ntry loop
+
+        } // End of Stmt loop
+
+        logInfo("Processed ${stmtCount} statements in file")
+
+        // Arkiver prosessert fil
+        def dst = new File(destLocation + file.getName())
+        copyFileWithEncoding(file, dst, encoding)
+        logInfo("File archived to: ${dst.getAbsolutePath()}")
+    }
+
+    // Skriv output til fil
+    outputFile.write(output)
+    logInfo("Output written to: ${outFileName}")
+    logInfo("CAMT053 processing completed")
+}
 
 // 1. this block of code is for the bank file. The if logic around each code block drives which files is transformed and loaded.
 if(rule == "BANK_LOAD") {
