@@ -23,157 +23,65 @@ def logWarn(msg)  { println "[EXTRACT][WARN]  ${msg}" }
 def logError(msg) { println "[EXTRACT][ERROR] ${msg}" }
 // 0. Camt.053
 if(rule == "CAMT053_LOAD"){
+    long fullRunTimeStart = System.nanoTime()
     locationPath = "/data/ar/dev/inbox/camt053/"
     destLocation = "/data/ar/dev/inbox/camt053/arkiv/"
     filePath = ""
     fileName = ""
-    def matchingFiles = []
-    new File(locationPath).eachFile() {
-         file -> if(file.getName().contains("camt053")){
-            filePath = file.getAbsolutePath()
-            fileName = file.getName()
-            fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
-            logInfo("Selected file name: ${fileName}")
-            logInfo("Selected file: ${filePath}")
-            logInfo("Selected file from substring: ${fileNameFromPath}")
-            logInfo("File Path from substring: ${filePath.substring(filePath.lastIndexOf("/") + 1)}")
-            matchingFiles << file
-        }
+
+    def header = 'KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5'
+
+    def folder = new File(locationPath)
+    if (!folder.exists()) {
+        def msg = "CAMT053_LOAD: Directory not found: ${locationPath}"
+        logError(msg)
+        outputFile.write(header, "UTF-8")
+        throw new RuntimeException(msg)
     }
 
-    // CSV header - kan tilpasses ARCS krav
-    output = "KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5"
+    def matchingFiles = (folder.listFiles() ?: [])
+        .findAll { file -> isCamt053File(file) }
+        .sort { [it.lastModified(), it.getName()] }
 
-    matchingFiles.each { file->
-        logInfo("Processing CAMT053 file: ${file.getName()}")
+    if (matchingFiles.isEmpty()) {
+        logWarn("No matching CAMT.053 files found in: ${locationPath} — writing empty output.")
+        outputFile.write(header, "UTF-8")
+        return
+    }
 
-        // Parse XML med XmlSlurper - effektivt for store filer
-        def xml = new XmlSlurper().parse(file)
+    StringBuilder outputBuilder = new StringBuilder()
+    boolean firstFile = true
 
-        // Hent kundenummer fra GrpHdr (hvis tilgjengelig)
-        def kundeNummer = xml.BkToCstmrStmt.GrpHdr.MsgRcpt.Id.OrgId.Othr.find { it.SchmeNm.Cd == 'CUST' }?.Id?.text() ?: ""
-        logInfo("Kundenummer: ${kundeNummer}")
+    matchingFiles.each { file ->
+        filePath = file.getAbsolutePath()
+        fileName = file.getName()
+        fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+        logInfo("Selected file name: ${fileName}")
+        logInfo("Selected file: ${filePath}")
+        logInfo("Processing CAMT053 file: ${fileName}")
 
-        // 1. TODO: finn <Stmt> og hent ut <IBAN> tag for å få kontonummeret
-        // VIKTIG: Loop gjennom hver Stmt for å få riktig IBAN for hver konto
-        def stmtCount = 0
-        xml.BkToCstmrStmt.Stmt.each { stmt ->
-            stmtCount++
+        String fileOutput = buildCamt053Output(file, logInfo, logWarn)
 
-            // Hent IBAN for denne spesifikke Stmt
-            def ibanFull = stmt.Acct.Id.IBAN.text()
-            // Fjern landskode (NO) + 2 første sifre (totalt 4 tegn)
-            def iban = ibanFull.length() > 4 ? ibanFull.substring(4) : ibanFull
-            logInfo("Processing Statement #${stmtCount} - IBAN: ${ibanFull} -> ${iban}")
+        if (firstFile) {
+            outputBuilder.append(fileOutput)
+            firstFile = false
+        } else {
+            // Hopp over header-linje for påfølgende filer
+            def lines = fileOutput.split('\n') as List
+            outputBuilder.append('\n').append(lines.drop(1).join('\n'))
+        }
 
-            // Hent valutakode for denne Stmt
-            def currency = stmt.Acct.Ccy.text()
-            logInfo("Currency: ${currency}")
-
-            // 2. TODO: finn <TxsSummry> og hent <NbOfNtries> for antall transaksjoner
-            def nbOfEntries = stmt.TxsSummry.TtlNtries.NbOfNtries.text()
-            logInfo("Number of entries in statement: ${nbOfEntries}")
-
-            // 3. TODO: Loop gjennom hver <Ntry> transaksjon i denne Stmt
-            stmt.Ntry.each { ntry ->
-
-            // Hent grunnleggende transaksjonsdata
-            def amount = ntry.Amt.text()
-            def amountCcy = ntry.Amt.@Ccy.text()
-            def cdtDbtInd = ntry.CdtDbtInd.text() // CRDT (Credit) eller DBIT (Debit)
-            def bookingDate = ntry.BookgDt.Dt.text()
-            def valueDate = ntry.ValDt.Dt.text()
-            def ntryRef = ntry.NtryRef.text()
-            def acctSvcrRef = ntry.AcctSvcrRef.text()
-
-            // Konverter beløp til øre (multipliser med 100)
-            def belopOre = ""
-            try {
-                def belopDecimal = new BigDecimal(amount)
-                belopOre = (belopDecimal * 100).setScale(0, BigDecimal.ROUND_HALF_UP).toString()
-            } catch (Exception e) {
-                logWarn("Could not convert amount to øre: ${amount}")
-                belopOre = amount
-            }
-
-            // Initialiser output-felt
-            def content1 = ""
-            def content2 = ""
-            def content3 = ""
-            def content4 = ""
-            def content5 = ""
-
-            // 4. TODO: Hent detaljer fra <NtryDtls> -> <TxDtls>
-            ntry.NtryDtls.TxDtls.each { txDtls ->
-
-                // Hent referanser fra <Refs>
-                def txId = txDtls.Refs.TxId.text()
-                def clrSysRef = txDtls.Refs.ClrSysRef.text() // KID nummer
-                def txAcctSvcrRef = txDtls.Refs.AcctSvcrRef.text()
-
-                // content1: KID nummer / ClrSysRef eller TxId
-                content1 = clrSysRef ?: txId ?: txAcctSvcrRef
-
-                // content2: Remittance Information (betalingsinformasjon)
-                // Fra <RmtInf> -> <Ustrd> (Unstructured remittance info)
-                content2 = txDtls.RmtInf.Ustrd.text()
-
-                // 5. TODO: Sjekk om debit eller credit og hent riktige felt for content3
-                // For CREDIT transaksjoner: Hent Debtor name (hvem som betalte oss)
-                // For DEBIT transaksjoner: Hent Creditor name (hvem vi betalte til)
-                def dbtrName = txDtls.RltdPties.Dbtr.Nm.text()
-                def cdtrName = txDtls.RltdPties.Cdtr.Nm.text()
-
-                if (cdtDbtInd == "CRDT") {
-                    // Credit - vi mottok penger
-                    content3 = dbtrName
-                    // Debitor konto
-                    def dbtrAcct = txDtls.RltdPties.DbtrAcct.Id.Othr.Id.text()
-                    content4 = dbtrAcct
-                } else if (cdtDbtInd == "DBIT") {
-                    // Debit - vi betalte ut penger
-                    content3 = cdtrName
-                    // Kreditor konto
-                    def cdtrAcct = txDtls.RltdPties.CdtrAcct.Id.Othr.Id.text()
-                    content4 = cdtrAcct
-                }
-
-                // content5: Transaction Type/Code (valgfritt)
-                def txDomain = ntry.BkTxCd.Domn.Cd.text()
-                def txFamily = ntry.BkTxCd.Domn.Fmly.Cd.text()
-                content5 = "${txDomain}/${txFamily}/${cdtDbtInd}"
-
-                // Bygg CSV linje
-                // Format: KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5
-                def csvLine = "${kundeNummer},${iban},${amountCcy},${bookingDate},${belopOre},${amount},${content1},${content2},${content3},${content4},${content5}"
-                output = output + '\n' + csvLine
-
-                logInfo("Processed entry: Date=${bookingDate}, Amount=${amount} ${amountCcy}, Type=${cdtDbtInd}, Ref=${content1}")
-            }
-
-            // Hvis ingen TxDtls, lag en linje med Ntry-nivå data
-            if (ntry.NtryDtls.TxDtls.size() == 0) {
-                content5 = cdtDbtInd
-                def csvLine = "${kundeNummer},${iban},${amountCcy},${bookingDate},${belopOre},${amount},${ntryRef},${acctSvcrRef},,,${content5}"
-                output = output + '\n' + csvLine
-                logInfo("Processed entry (no TxDtls): Date=${bookingDate}, Amount=${amount} ${amountCcy}, Type=${cdtDbtInd}")
-            }
-        } // End of Ntry loop
-
-        } // End of Stmt loop
-
-        logInfo("Processed ${stmtCount} statements in file")
-
-        // Arkiver prosessert fil
-        def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
+        def dst = new File(destLocation + fileName)
+        copyFileWithEncoding(file, dst, "UTF-8")
         logInfo("File archived to: ${dst.getAbsolutePath()}")
     }
 
-    // Skriv output til fil
-    outputFile.write(output)
+    outputFile.write(outputBuilder.toString(), "UTF-8")
     logInfo("Output written to: ${outFileName}")
-    logInfo("CAMT053 processing completed")
+
+    long fullRunTimeEnd = System.nanoTime()
+    long fullDuration = fullRunTimeEnd - fullRunTimeStart
+    logInfo("CAMT053 processing completed in: " + (fullDuration / 1_000_000) + " ms")
 }
 
 // 1. this block of code is for the bank file. The if logic around each code block drives which files is transformed and loaded.
@@ -191,25 +99,25 @@ if(rule == "BANK_LOAD") {
         logInfo("Directory found: ${locationPath}")
     }
 
-    folder.eachFile() {
-         file -> if(file.getName().contains("tdnb")){
-             filePath = file.getAbsolutePath()
-             fileName = file.getName()
-             fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
-             logInfo("Selected file name: ${fileName}")
-             logInfo("Selected file: ${filePath}")
-             logInfo("Selected file from substring: ${fileNameFromPath}")
-             logInfo("File Path from substring: ${filePath.substring(filePath.lastIndexOf("/") + 1)}")
-         }
-      }
+    def matchingFiles = (folder.listFiles() ?: [])
+        .findAll { file -> isLegacyBankFile(file) }
+        .sort { [it.lastModified(), it.getName()] }
 
     // Check if a valid file was found
-    if (filePath == "") {
-        logError("No matching file found with 'tdnb' in its name.")
+    if (matchingFiles.isEmpty()) {
+        logError("No matching bank file found. Expected a legacy 'tdnb' file.")
         return
     }
 
-    def file = new File(filePath)
+    def file = matchingFiles.first()
+    filePath = file.getAbsolutePath()
+    fileName = file.getName()
+    fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
+    logInfo("Selected file name: ${fileName}")
+    logInfo("Selected file: ${filePath}")
+    logInfo("Selected file from substring: ${fileNameFromPath}")
+    logInfo("File Path from substring: ${filePath.substring(filePath.lastIndexOf("/") + 1)}")
+
     def reader = file.newReader(encoding) // Create the BufferedReader
 
     // Initialize variables
@@ -996,4 +904,262 @@ def copyFileWithEncoding(File src, File dst, String encoding) {
 // Method to filter out blank lines or lines with only whitespace
 def filterNonEmptyLines(List<String> lines) {
     return lines.findAll { line -> !line.trim().isEmpty() }
+}
+
+def isLegacyBankFile(File file) {
+    return file?.isFile() && file.getName().toLowerCase(Locale.ROOT).contains("tdnb")
+}
+
+def isCamt053File(File file) {
+    if (!file?.isFile()) {
+        return false
+    }
+
+    def lowerName = file.getName().toLowerCase(Locale.ROOT)
+    if (!lowerName.endsWith(".xml")) {
+        return false
+    }
+
+    if (lowerName.contains("c053") || lowerName.contains("camt")) {
+        return true
+    }
+
+    try {
+        def preview = file.withReader("UTF-8") { reader ->
+            def lines = []
+            for (int i = 0; i < 10; i++) {
+                def line = reader.readLine()
+                if (line == null) {
+                    break
+                }
+                lines << line
+            }
+            lines.join("\n")
+        }
+        return preview.toLowerCase(Locale.ROOT).contains("camt.053")
+    } catch (Exception ignored) {
+        return false
+    }
+}
+
+def buildCamt053Output(File file, Closure logInfo, Closure logWarn) {
+    def xml = new XmlSlurper(false, false).parse(file)
+    def header = 'KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5'
+    def rows = []
+
+    def kundeNummer = firstNonBlank([
+        xml.BkToCstmrStmt.GrpHdr.MsgRcpt.Id.OrgId.Othr.find { it.SchmeNm.Cd.text() == 'CUST' }?.Id?.text(),
+        xml.BkToCstmrStmt.Stmt[0]?.Acct?.Ownr?.Id?.OrgId?.Othr[0]?.Id?.text()
+    ])
+
+    int statementCount = 0
+    xml.BkToCstmrStmt.Stmt.each { stmt ->
+        statementCount++
+
+        def accountNumber = normalizeAccountNumber(firstNonBlank([
+            stmt.Acct.Id.IBAN.text(),
+            stmt.Acct.Id.Othr.Id.text()
+        ]))
+        def statementCurrency = firstNonBlank([stmt.Acct.Ccy.text(), 'NOK'])
+
+        stmt.Ntry.each { ntry ->
+            def direction = firstNonBlank([ntry.CdtDbtInd.text(), 'CRDT'])
+            def bookingDate = formatCamtDate(ntry.BookgDt.Dt.text(), logWarn)
+            def txDetails = ntry.NtryDtls.TxDtls
+
+            if (!txDetails || txDetails.size() == 0) {
+                def signedAmount = formatSignedAmount(ntry.Amt.text(), direction, logWarn)
+                rows << toCsvLine([
+                    kundeNummer,
+                    accountNumber,
+                    firstNonBlank([ntry.Amt.@Ccy.text(), statementCurrency]),
+                    bookingDate,
+                    toOreAmount(signedAmount, logWarn),
+                    signedAmount,
+                    firstNonBlank([ntry.NtryRef.text(), ntry.AcctSvcrRef.text()]),
+                    '',
+                    '',
+                    buildBankContent5(ntry, direction),
+                    ''
+                ])
+                return
+            }
+
+            txDetails.each { txDtls ->
+                def signedAmount = formatSignedAmount(
+                    firstNonBlank([txDtls.AmtDtls.TxAmt.Amt.text(), ntry.Amt.text()]),
+                    direction,
+                    logWarn
+                )
+
+                def remittanceLines = txDtls.RmtInf.Ustrd.collect { it.text() }.findAll { it }
+                def remittanceDeduped = remittanceLines.inject([]) { acc, v ->
+                    (acc.isEmpty() || acc.last() != v) ? acc + v : acc
+                }
+                def remittanceText = collapseWhitespace(remittanceDeduped.join(''))
+                if (!remittanceText) {
+                    remittanceText = collapseWhitespace(txDtls.AddtlTxInf.text())
+                }
+
+                def content1 = (remittanceText == 'OVERF. NORGES BANK')
+                    ? extractRelatedAccount(txDtls.RltdPties.DbtrAcct)
+                    : firstNonBlank([
+                        txDtls.Refs.ClrSysRef.text(),
+                        txDtls.Refs.EndToEndId.text(),
+                        txDtls.Refs.TxId.text(),
+                        txDtls.Refs.AcctSvcrRef.text(),
+                        ntry.AcctSvcrRef.text(),
+                        ntry.NtryRef.text()
+                    ])
+
+                rows << toCsvLine([
+                    kundeNummer,
+                    accountNumber,
+                    firstNonBlank([txDtls.AmtDtls.TxAmt.Amt.@Ccy.text(), ntry.Amt.@Ccy.text(), statementCurrency]),
+                    bookingDate,
+                    toOreAmount(signedAmount, logWarn),
+                    signedAmount,
+                    content1,
+                    remittanceText,
+                    findCounterpartyName(txDtls, direction),
+                    buildBankContent5(ntry, direction),
+                    ''
+                ])
+            }
+        }
+    }
+
+    logInfo("Processed CAMT.053 file '${file.getName()}' with ${statementCount} statements and ${rows.size()} output rows.")
+    return ([header] + rows).join('\n')
+}
+
+def findCounterpartyName(txDtls, String direction) {
+    if (direction == 'DBIT') {
+        return firstNonBlank([
+            txDtls.RltdPties.Cdtr.Nm.text(),
+            txDtls.RltdPties.UltmtCdtr.Nm.text(),
+            txDtls.RltdPties.Dbtr.Nm.text()
+        ])
+    }
+
+    return firstNonBlank([
+        txDtls.RltdPties.Dbtr.Nm.text(),
+        txDtls.RltdPties.UltmtDbtr.Nm.text(),
+        txDtls.RltdPties.Cdtr.Nm.text()
+    ])
+}
+
+def findCounterpartyAccount(txDtls, String direction) {
+    if (direction == 'DBIT') {
+        return firstNonBlank([
+            extractRelatedAccount(txDtls.RltdPties.CdtrAcct),
+            extractRelatedAccount(txDtls.RltdPties.DbtrAcct)
+        ])
+    }
+
+    return firstNonBlank([
+        extractRelatedAccount(txDtls.RltdPties.DbtrAcct),
+        extractRelatedAccount(txDtls.RltdPties.CdtrAcct)
+    ])
+}
+
+def extractRelatedAccount(accountNode) {
+    return normalizeAccountNumber(firstNonBlank([
+        accountNode?.Id?.IBAN?.text(),
+        accountNode?.Id?.Othr?.Id?.text()
+    ]))
+}
+
+def buildBankContent5(ntry, String direction) {
+    return [
+        ntry.BkTxCd.Prtry.Cd.text(),
+        ntry.BkTxCd.Domn.Cd.text(),
+        ntry.BkTxCd.Domn.Fmly.Cd.text(),
+        ntry.BkTxCd.Domn.Fmly.SubFmlyCd.text(),
+        direction
+    ].findAll { it }.join('/')
+}
+
+def formatCamtDate(String dateText, Closure logWarn) {
+    def trimmedDate = firstNonBlank([dateText])
+    if (!trimmedDate) {
+        return ''
+    }
+
+    try {
+        def parsed = new SimpleDateFormat('yyyy-MM-dd', Locale.ENGLISH).parse(trimmedDate)
+        return new SimpleDateFormat('dd-MMM-yy', Locale.ENGLISH).format(parsed)
+    } catch (Exception e) {
+        logWarn("Could not parse CAMT date '${dateText}': ${e.message}")
+        return trimmedDate
+    }
+}
+
+def formatSignedAmount(String amountText, String direction, Closure logWarn) {
+    def normalizedAmount = firstNonBlank([amountText]).replace(',', '.')
+    if (!normalizedAmount) {
+        return ''
+    }
+
+    try {
+        def amount = new BigDecimal(normalizedAmount)
+        if (direction == 'DBIT' && amount.signum() > 0) {
+            amount = amount.negate()
+        }
+        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString()
+    } catch (Exception e) {
+        logWarn("Could not parse CAMT amount '${amountText}': ${e.message}")
+        return normalizedAmount
+    }
+}
+
+def toOreAmount(String amountText, Closure logWarn) {
+    def normalizedAmount = firstNonBlank([amountText]).replace(',', '.')
+    if (!normalizedAmount) {
+        return ''
+    }
+
+    try {
+        return new BigDecimal(normalizedAmount)
+            .multiply(new BigDecimal('100'))
+            .setScale(0, RoundingMode.HALF_UP)
+            .toPlainString()
+    } catch (Exception e) {
+        logWarn("Could not convert CAMT amount '${amountText}' to ore: ${e.message}")
+        return normalizedAmount
+    }
+}
+
+def normalizeAccountNumber(String accountNumber) {
+    def normalized = firstNonBlank([accountNumber]).replace(' ', '')
+    if (normalized.startsWith('NO') && normalized.length() > 4) {
+        return normalized.substring(4)
+    }
+    return normalized
+}
+
+def collapseWhitespace(String value) {
+    return value ? value.replaceAll(/\s+/, ' ').trim() : ''
+}
+
+def firstNonBlank(List values) {
+    def firstValue = values.find { value ->
+        value != null && value.toString().trim()
+    }
+    return firstValue == null ? '' : firstValue.toString().trim()
+}
+
+def toCsvLine(List values) {
+    return values.collect { value -> escapeCsvValue(value) }.join(',')
+}
+
+def escapeCsvValue(value) {
+    def normalizedValue = value == null ? '' : value.toString()
+    if (normalizedValue.contains('"')) {
+        normalizedValue = normalizedValue.replace('"', '""')
+    }
+    if (normalizedValue.contains(',') || normalizedValue.contains('\n') || normalizedValue.contains('\r') || normalizedValue.contains('"')) {
+        return '"' + normalizedValue + '"'
+    }
+    return normalizedValue
 }
