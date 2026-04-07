@@ -24,8 +24,8 @@ def logError(msg) { println "[EXTRACT][ERROR] ${msg}" }
 // 0. Camt.053
 if(rule == "CAMT053_LOAD"){
     long fullRunTimeStart = System.nanoTime()
-    locationPath = "/data/ar/dev/inbox/camt053/"
-    destLocation = "/data/ar/dev/inbox/camt053/arkiv/"
+    locationPath = "/data/ar/dev/inbox/bank/camt053/"
+    destLocation = "/data/ar/dev/inbox/bank/camt053/arkiv/"
     filePath = ""
     fileName = ""
 
