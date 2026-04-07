@@ -18,9 +18,9 @@ outputFile = new File(outFileName)
 def String encoding = "ISO-8859-1"
 
 // Logging helpers
-def logInfo(msg)  { println "[EXTRACT][INFO]  ${msg}" }
-def logWarn(msg)  { println "[EXTRACT][WARN]  ${msg}" }
-def logError(msg) { println "[EXTRACT][ERROR] ${msg}" }
+def logInfo  = { msg -> println "[EXTRACT][INFO]  ${msg}" }
+def logWarn  = { msg -> println "[EXTRACT][WARN]  ${msg}" }
+def logError = { msg -> println "[EXTRACT][ERROR] ${msg}" }
 // 0. Camt.053
 if(rule == "CAMT053_LOAD"){
     long fullRunTimeStart = System.nanoTime()
