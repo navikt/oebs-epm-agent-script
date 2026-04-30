@@ -17,7 +17,7 @@ def logWarn(msg)  { println "[EXTRACT][WARN]  ${msg}" }
 def logError(msg) { println "[EXTRACT][ERROR] ${msg}" }
 
 // Temporary verification toggle for runtime path detection.
-boolean DEBUG_PATH_VERIFICATION = true
+boolean DEBUG_PATH_VERIFICATION = false
 
 def failMalformed(String message) {
     logError(message)
@@ -284,12 +284,15 @@ else if (rule == "OEBS_BANK_LOAD") {
             def debitStr  = getSemicolonField(line, 3) ?: ""
             def creditStr = getSemicolonField(line, 4) ?: ""
             def datestr   = getSemicolonField(line, 5)?.trim()
+            if (!datestr) {
+                failMalformed("OEBS_BANK_LOAD: missing or blank date field in line: '${line}' in file: ${file.getName()}")
+            }
 
             def debit  = debitStr  == "" ? BigDecimal.ZERO : new BigDecimal(debitStr)
             def credit = creditStr == "" ? BigDecimal.ZERO : new BigDecimal(creditStr)
 
             def newdate = reformatDate(datestr, FMT_NO_SHORT, FMT_OUT_DATE)
-            if (newdate == null) continue
+            if (newdate == null) failMalformed("OEBS_BANK_LOAD: failed to reformat date '${datestr}' in line: '${line}' in file: ${file.getName()}")
             line = line.replace(datestr, newdate)
             output.append('\n').append(line).append(';').append((debit + credit).toPlainString())
             rowsWritten++
