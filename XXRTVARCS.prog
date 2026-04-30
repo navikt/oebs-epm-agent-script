@@ -8,18 +8,43 @@
 # Change log
 #
 # Date         Name                      Description
-# 13.05.2025   Rasmus Vedholm Krog      
-
+# 13.05.2025   Rasmus Vedholm Krog      Oprettet script for å håndtere overføring av filer fra AdraMatch katalog til EPM-server.
+#
+#
 # Parametre fra Oracle Concurrent Manager:
 # $1 = Modulvalg (BANK, GL, GRENSESNITT, TILTAK, ALLE)
+# sjekk TWO_TASKS for mer informasjon
+MODUL=${5:-ALLE} # Default til ALLE hvis ikke angitt
+p_miljo=${TWO_TASK}
+echo "Miljø: $p_miljo"
 
-MODUL=${1:-ALLE} # Default til ALLE hvis ikke angitt
+# === Konstanter ===
+# Definerer variabler for kataloger og arkiv
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 shopt -s nullglob
 
-ROOT_DIR="/app01/ARCS-Q"
-DEST_ROOT_DIR="/data/ar/dev/inbox"
-LOGG_FIL="/home/apploebsq1/ARCS/fil_overforing.log"
+if [[ "${p_miljo}" ==  "OEBSP" ]]; then
+    echo "PROD-miljø"
+    ROOT_DIR="/app01/ARCS"
+    DEST_ROOT_DIR="/data/ar/prod/inbox"
+elif [[ "${p_miljo}" == "oebsq1" ]]; then
+    echo "Q-miljø"
+    ROOT_DIR="/app01/ARCS-Q"
+    DEST_ROOT_DIR="/data/ar/dev/inbox"
+elif [[ "${p_miljo}" == "oebst1" ]]; then
+    echo "T-miljø"
+    ROOT_DIR="/app01/ARCS-T"
+    DEST_ROOT_DIR="/data/ar/dev/inbox"
+elif [[ "${p_miljo}" == "oebsu1" ]]; then
+    echo "U-miljø"
+    ROOT_DIR="/app01/ARCS-T"
+    DEST_ROOT_DIR="/data/ar/dev/inbox"
+else
+    echo "Ukjent miljø: $TWO_TASKS. Avslutter."
+    exit 1
+fi
+
+
 DEST_USER="epmdrift"
 DEST_HOST="155.55.63.41"
 
@@ -55,11 +80,18 @@ DEST_ANNULLERT_ARKIV="$DEST_ANNULLERT/arkiv"
 DEST_TILTAK_MAANEDLIG="$DEST_ROOT_DIR/tiltak/maanedlig"
 ARKIV_TILTAK_MAANEDLIG_DEST="$DEST_TILTAK_MAANEDLIG/arkiv"
 
+# Tiltak Daglig LT
+DEST_TILTAK_DAGLIG_LT="$DEST_ROOT_DIR/tiltak/daglig/LT"
+DEST_TILSAGN_LT="$DEST_TILTAK_DAGLIG_LT/tilsagn"
+DEST_REFUSJON_LT="$DEST_TILTAK_DAGLIG_LT/refusjon"
+ARKIV_TILSAGN_LT_ARKIV="$DEST_TILSAGN_LT/arkiv"
+ARKIV_REFUSJON_LT_ARKIV="$DEST_REFUSJON_LT/arkiv"
+
 # === Logging ===
 log_message() {
     local DATO
     DATO=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$DATO] $1" >> "$LOGG_FIL"
+    echo "[$DATO] $1"
 }
 
 # === Kontrollfunksjon for mapper ===
@@ -193,7 +225,7 @@ process_gl_files() {
     fi
 
     for FIL in "$SRC_GL"/*GL2BETTY-*--1.lst; do
-        [[ -e "$FIL" ]] || continue 
+        [[ -e "$FIL" ]] || continue
         local FILNAVN NYTT_NAVN TIMESTAMP
         FILNAVN=$(basename "$FIL")
         sleep 1
@@ -311,6 +343,8 @@ process_tiltak_files() {
     process_daglig_faktura_files
     log_message "Månedlig tiltak"
     process_manedlig_tiltak_files
+    log_message "Daglig tiltak LT"
+    process_daglig_tiltak_LT_files
 }
 
 process_daglig_tiltak_files() {
@@ -381,6 +415,84 @@ process_daglig_tiltak_files() {
             fi
         else
             log_message "Feilet overføring av fil $FILNAVN. Ikke arkivert."
+        fi
+    done
+}
+
+process_daglig_tiltak_LT_files() {
+    for REMOTE_DIR in "$DEST_TILSAGN_LT" "$DEST_REFUSJON_LT"; do
+        if ! ssh "$DEST_USER@$DEST_HOST" "[ -d '$REMOTE_DIR' ]"; then
+            log_message "log_message Mappen $REMOTE_DIR eksisterer ikke på $DEST_HOST. Hopper over daglig tiltak LT filer."
+            return
+        fi
+    done
+
+    # FIKS (1): plukk kun LT-filer
+    for FIL in "$SRC_TILTAK"/*_LT_*_dag.csv; do
+        [[ -e "$FIL" ]] || continue
+        local FILNAVN NYTT_NAVN TIMESTAMP
+        FILNAVN=$(basename "$FIL")
+
+        # FIKS (4): ekstra sikkerhet – hvis noen filer ikke matcher forventet LT-mønster
+        if [[ "$FILNAVN" != *_LT_* ]]; then
+            log_message "Hopper over fil $FILNAVN i LT-jobb (ikke LT)."
+            continue
+        fi
+
+        sleep 1
+        TIMESTAMP=$(date '+%Y%m%d%H%M%S')
+        if [[ "$FILNAVN" =~ ^[0-9]+_ ]]; then
+            NYTT_NAVN="${TIMESTAMP}_${FILNAVN#*_}"
+        else
+            NYTT_NAVN="${TIMESTAMP}_${FILNAVN}"
+        fi
+
+        if [ -f "$ARKIV_TILTAK/$FILNAVN" ]; then
+            log_message "Fil $FILNAVN eksisterer allerede i lokalt arkiv. Hopper over filen."
+            continue
+        fi
+
+        if [ ! -s "$FIL" ]; then
+            prosesser_0kb_fil "$FIL" "$ARKIV_TILTAK" "$ARKIV_TILSAGN_LT_ARKIV"
+            prosesser_0kb_fil "$FIL" "$ARKIV_TILTAK" "$ARKIV_REFUSJON_LT_ARKIV"
+            continue
+        fi
+
+        local all_transfers_successful=1
+
+        # Definer arrays for remote-destinasjoner og tilhørende arkiv
+        remote_dirs=( "$DEST_TILSAGN_LT" "$DEST_REFUSJON_LT")
+        remote_archives=( "$ARKIV_TILSAGN_LT_ARKIV" "$ARKIV_REFUSJON_LT_ARKIV")
+
+        # Loop gjennom indeksene i arrayene
+        for i in "${!remote_dirs[@]}"; do
+            REMOTE_DIR="${remote_dirs[$i]}"
+            REMOTE_ARKIV="${remote_archives[$i]}"
+
+            if [[ $(file_exists_in_remote "$FILNAVN" "$REMOTE_DIR" "$REMOTE_ARKIV") == "Eksisterer" ]]; then
+                log_message "Fil $FILNAVN eksisterer allerede på remote i $REMOTE_DIR eller $REMOTE_ARKIV."
+            else
+                scp -pC "$FIL" "$DEST_USER@$DEST_HOST:$REMOTE_DIR/"
+                if [ $? -eq 0 ]; then
+                    log_message "Overførte $FILNAVN til $DEST_USER@$DEST_HOST:$REMOTE_DIR."
+                else
+                    log_message "Kunne ikke overføre $FILNAVN til $DEST_USER@$DEST_HOST:$REMOTE_DIR."
+                    all_transfers_successful=0
+                fi
+            fi
+        done
+
+
+        if [ $all_transfers_successful -eq 1 ]; then
+            output=$(cp -v "$FIL" "$ARKIV_TILTAK/$NYTT_NAVN" 2>&1)
+            if [ $? -eq 0 ]; then
+                log_message "Arkiverte $FILNAVN til $ARKIV_TILTAK. cp output: $output."
+                rm -v "$FIL"
+            else
+                log_message "Feilet arkivering av fil $FILNAVN. cp feilet med status $all_transfers_successful. Feilmelding: $output."
+            fi
+        else
+            log_message "Feilet overføring av fil $FILNAVN. cp feilet med status $all_transfers_successful. Feilmelding: $output."
         fi
     done
 }
@@ -594,10 +706,14 @@ case "$MODUL" in
         check_directory_exists "$ARKIV_GL"
         check_directory_exists "$ARKIV_GRENSESNITT"
         check_directory_exists "$ARKIV_TILTAK"
+        log_message "Starter overføring av Bank-fil."
         process_tsp_files
         process_tdnb_bank_files
+        log_message "Starter overføring av GL-fil."
         process_gl_files
+        log_message "Starter overføring av Grensesnitt-fil."
         process_grensesnitt_files
+        log_message "Starter overføring av Tiltaksfiler."
         process_tiltak_files
         ;;
 esac

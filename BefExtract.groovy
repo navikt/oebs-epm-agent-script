@@ -1,21 +1,17 @@
-import groovy.json.* 
-import groovy.xml.*
-import java.util.zip.*
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.text.ParseException
-import java.io.BufferedReader
-import java.lang.StringBuilder
+import groovy.xml.XmlSlurper
 
-// Turn off SQL Processing by Agent 
+import java.text.SimpleDateFormat
+import java.text.ParseException
+
+// Turn off SQL Processing by Agent
 agentAPI.skipAction('true')
 
-// Get bind variables - Rule variable determines which block of code runs. Variables are defined in the 'query' menu in the application and registered application parameters
+// Get bind variables - Rule variable determines which block of code runs.
 bindVariables = agentAPI.getBindVariables()
 rule = bindVariables["Rule"]
-def outFileName = agentContext["DATAFILENAME"]
+String outFileName = agentContext["DATAFILENAME"] as String
 outputFile = new File(outFileName)
-def String encoding = "ISO-8859-1"
+String encoding = "ISO-8859-1"
 
 // Logging helpers
 def logInfo  = { msg -> println "[EXTRACT][INFO]  ${msg}" }
@@ -84,127 +80,213 @@ if(rule == "CAMT053_LOAD"){
     logInfo("CAMT053 processing completed in: " + (fullDuration / 1_000_000) + " ms")
 }
 
-// 1. this block of code is for the bank file. The if logic around each code block drives which files is transformed and loaded.
-if(rule == "BANK_LOAD") {
-    long fullRunTimeStart = System.nanoTime()
-    locationPath = "/data/ar/dev/inbox/bank/"
-    destLocation = "/data/ar/dev/inbox/bank/arkiv/"
-    filePath = ""
-    fileName = ""
-    def folder = new File(locationPath)
-    if (!folder.exists()) {
+// Temporary verification toggle for runtime path detection.
+boolean DEBUG_PATH_VERIFICATION = false
+
+def failMalformed(String message) {
+    logError(message)
+    throw new IllegalStateException(message)
+}
+
+String runDir = System.getProperty("user.dir") ?: ""
+String baseRoot = (runDir.contains("/data/ar/prod/") || runDir.endsWith("/data/ar/prod")) ? "/data/ar/prod" :
+        ((runDir.contains("/data/ar/dev/") || runDir.endsWith("/data/ar/dev")) ? "/data/ar/dev" : "")
+if (!baseRoot) {
+    failMalformed("Cannot determine base root from user.dir='${runDir}'")
+}
+logInfo("Resolved base root: ${baseRoot}")
+
+if (DEBUG_PATH_VERIFICATION) {
+    logInfo("DEBUG user.dir='${runDir}'")
+    logInfo("DEBUG baseRoot='${baseRoot}'")
+    def inboxDir = new File("${baseRoot}/inbox")
+    if (!inboxDir.exists()) {
+        failMalformed("DEBUG check failed: '${inboxDir.getAbsolutePath()}' does not exist. user.dir='${runDir}'")
+    }
+    logInfo("DEBUG check passed: '${inboxDir.getAbsolutePath()}' exists")
+}
+
+def findFiles(String locationPath, Closure nameMatcher) {
+    def dir = new File(locationPath)
+    if (!dir.exists()) {
         logError("Directory not found: ${locationPath}")
-        return
-    } else {
-        logInfo("Directory found: ${locationPath}")
+        return ([] as List<File>)
     }
-
-    def matchingFiles = (folder.listFiles() ?: [])
-        .findAll { file -> isLegacyBankFile(file) }
-        .sort { [it.lastModified(), it.getName()] }
-
-    // Check if a valid file was found
-    if (matchingFiles.isEmpty()) {
-        logError("No matching bank file found. Expected a legacy 'tdnb' file.")
-        return
-    }
-
-    def file = matchingFiles.first()
-    filePath = file.getAbsolutePath()
-    fileName = file.getName()
-    fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
-    logInfo("Selected file name: ${fileName}")
-    logInfo("Selected file: ${filePath}")
-    logInfo("Selected file from substring: ${fileNameFromPath}")
-    logInfo("File Path from substring: ${filePath.substring(filePath.lastIndexOf("/") + 1)}")
-
-    def reader = file.newReader(encoding) // Create the BufferedReader
-
-    // Initialize variables
-    StringBuilder edit = new StringBuilder()
-    String currentLine = reader.readLine()
-    int numLines = 0
-    long startTime = System.nanoTime()
-
-   // Loop through each line of the bank file and check if the line starts with 01, 04, 05 (two lines) or 02 (three lines) transaction codes
-    while (currentLine != null) {
-        if(!currentLine.trim().isEmpty()) {
-            numLines++
-            String code = currentLine.substring(0, 8)
-            
-            if (code == "940SWI01" || code == "940SWI04" || code == "940SWI05") {
-                String nextLine = reader.readLine()
-                if (nextLine != null) {
-                    edit.append("\n").append(currentLine).append(nextLine)
-                    numLines++
-                } 
-            } else if (code == "940SWI02") {
-                String nextLine1 = reader.readLine()
-                String nextLine2 = reader.readLine()
-                if (nextLine1 != null && nextLine2 != null) {
-                    edit.append("\n").append(currentLine).append(nextLine1).append(nextLine2)
-                    numLines += 2
-                } 
-            }
+    List<File> result = []
+    dir.eachFile { File file ->
+        if (nameMatcher(file.getName())) {
+            logInfo("Selected file: ${file.getAbsolutePath()}")
+            result << file
         }
-        currentLine = reader.readLine()
+    }
+    return result
+}
+
+// Copy file with encoding, then delete source
+def copyFileWithEncoding(File src, File dst, String enc) {
+    src.withReader(enc) { reader ->
+        dst.withWriter(enc) { writer ->
+            writer << reader
+        }
+    }
+    src.delete()
+}
+
+// Filter out blank lines or lines with only whitespace
+def filterNonEmptyLines(List<String> lines) {
+    return lines.findAll { line -> !line.trim().isEmpty() }
+}
+
+// Read all lines with explicit encoding and guaranteed reader close.
+def readAllLines(File file, String enc) {
+    List<String> lines = []
+    file.withReader(enc) { reader ->
+        lines = reader.readLines()
+    }
+    return lines
+}
+
+// Parse a date string from one format and return it formatted in another.
+// Returns null and logs an error if parsing fails.
+def reformatDate(String datestr, SimpleDateFormat parseFormat, SimpleDateFormat outputFormat) {
+    try {
+        return outputFormat.format(parseFormat.parse(datestr))
+    } catch (ParseException e) {
+        logError("Error parsing date '${datestr}': ${e.message}")
+        return null
+    }
+}
+
+// Returns the value of the Nth semicolon-delimited field (0-indexed).
+// Returns null if the line has fewer fields than requested.
+def getSemicolonField(String line, int fieldIdx) {
+    int pos = 0
+    for (int i = 0; i < fieldIdx; i++) {
+        int sep = line.indexOf(";", pos)
+        if (sep == -1) return null
+        pos = sep + 1
+    }
+    int end = line.indexOf(";", pos)
+    return end == -1 ? line.substring(pos) : line.substring(pos, end)
+}
+
+// Reformat the date stored in field index 2 (between 2nd and 3rd semicolon) of a
+// semicolon-delimited line, and strip double-quote characters.
+// Returns the modified line, or null if date parsing fails.
+def reformatLineDate(String line, SimpleDateFormat parseFormat, SimpleDateFormat outputFormat) {
+    def datestr = getSemicolonField(line, 2)
+    if (datestr == null) return null
+    def newdate = reformatDate(datestr.trim(), parseFormat, outputFormat)
+    if (newdate == null) return null
+    return line.replace(datestr, newdate).replace('"', "")
+}
+
+// Shared date format instances (defined once to avoid repeated instantiation)
+def FMT_ISO_DATE     = new SimpleDateFormat("yyyy-MM-dd")              // Innlesing: Arena/tiltak-filer (regel 3, 4, 5, 6)
+def FMT_DD_MM_DATE   = new SimpleDateFormat("dd-MM-yyyy")              // Innlesing: norsk datoformat i avstemmingsfiler (regel 7, 8, 9, 12)
+def FMT_COMPACT_DATE = new SimpleDateFormat("yyyyMMdd")                // Innlesing: Oracle-filer uten skilletegn – OB04, GL2BETTY, fagsystem (regel 1, 13, 14)
+def FMT_NO_SHORT     = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Innlesing: norsk kort månedsnavn – GL2BETTY og Tiltak_Maanedlig (regel 2, 11)
+def FMT_OUT_DATE     = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Utdata: standard EPM/ARCS-format med 4-sifret år (brukes i alle regler)
+def FMT_OUT_SHORT    = new SimpleDateFormat("dd-MMM-yy",   Locale.ENGLISH) // Utdata: EPM/ARCS-format med 2-sifret år – kun BDATE i BANK_LOAD (regel 1)
+
+// 1. BANK_LOAD
+if (rule == "BANK_LOAD") {
+    logInfo("Starting rule: BANK_LOAD")
+    long fullRunTimeStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/bank/"
+    def destLocation = "${baseRoot}/inbox/bank/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("tdnb") }
+    if (matchingFiles.isEmpty()) {
+        logError("No matching file found with 'tdnb' in its name.")
+        return
     }
 
-    reader.close()
+    File file = matchingFiles[0]
+    def fileName = file.getName()
+    StringBuilder edit = new StringBuilder()
 
-    long endTime = System.nanoTime()
-    long duration = endTime - startTime
-    logInfo("For loop executed in: " + (duration / 1_000_000) + " ms")
-    logInfo("For loop executed in: " + (duration / 1_000_000_000.0) + " seconds")
+    // Loop through each line – close reader automatically via withReader
+    file.withReader(encoding) { reader ->
+        String currentLine = reader.readLine()
+        while (currentLine != null) {
+            if (!currentLine.trim().isEmpty()) {
+                if (currentLine.length() < 8) {
+                    failMalformed("BANK_LOAD: malformed input row (short header)")
+                }
+                String code = currentLine.substring(0, 8)
+                if (code == "940SWI01" || code == "940SWI04" || code == "940SWI05") {
+                    String nextLine = reader.readLine()
+                    if (nextLine != null) {
+                        edit.append("\n").append(currentLine).append(nextLine)
+                    }
+                } else if (code == "940SWI02") {
+                    String nextLine1 = reader.readLine()
+                    String nextLine2 = reader.readLine()
+                    if (nextLine1 != null && nextLine2 != null) {
+                        edit.append("\n").append(currentLine).append(nextLine1).append(nextLine2)
+                    }
+                }
+            }
+            currentLine = reader.readLine()
+        }
+    }
 
-    // Write the result to the output file
-    def myFile = new File(locationPath +'mySuperFile2.txt')
-    // Remove the first empty line if any and join the rest
+    def myFile = new File(locationPath + 'mySuperFile2.txt')
     myFile.write(edit.toString().split('\n').drop(1).join('\n'), encoding)
+    edit = null // release StringBuilder memory
 
     def editContents = []
     myFile.withReader(encoding) { fileReader ->
         editContents = fileReader.readLines()
     }
 
-    numLinesEdit = editContents.size()
-
+    def numLinesEdit = editContents.size()
+    logInfo("BANK_LOAD: parsed ${numLinesEdit} lines from intermediate file")
     StringBuilder finalDataBuilder = new StringBuilder()
-    long startTime2 = System.nanoTime()
+    def VALKODE = ''
+    def ACCOUNTNUMBER = ''
+    int rowsWritten = 0
 
-    // Loop through each line of the file content
     for (int i = 0; i < numLinesEdit; i++) {
         String line = editContents.get(i)
+        if (line.length() < 8) {
+            failMalformed("BANK_LOAD: malformed parsed row at index ${i} (short header)")
+        }
         String code = line.substring(0, 8)
 
-        // Handling 940SWI01 code
         if (code == "940SWI01") {
+            if (line.length() < 119) {
+                failMalformed("BANK_LOAD: malformed 940SWI01 row at index ${i}")
+            }
             VALKODE = line.substring(116, 119)
             ACCOUNTNUMBER = line.substring(41, 52)
         } else if (code == "940SWI02") {
+            if (line.length() < 198) {
+                failMalformed("BANK_LOAD: malformed 940SWI02 row at index ${i}")
+            }
             String KUNDENUMMER = line.substring(10, 20)
-            def bankDate = new Date().parse("yyyyMMdd", line.substring(190, 198))
-            String BDATE = bankDate.format("dd-MMM-yy")
+            def bankDate = FMT_COMPACT_DATE.parse(line.substring(190, 198))
+            String BDATE = FMT_OUT_SHORT.format(bankDate)
             String BELOP = line.substring(103, 118)
             String AMOUNT = BELOP[0..-3] + '.' + BELOP[-2..-1]
             def contents = []
 
             for (int j = 1; j <= 5 && i + j < numLinesEdit; j++) {
                 String nextLine = editContents.get(i + j)
-                if (nextLine.substring(0, 8) == "940SWI02") {
-                    break // Stop if another 940SWI02 is encountered
+                if (nextLine.length() < 8) {
+                    failMalformed("BANK_LOAD: malformed continuation row at index ${i + j}")
                 }
-                if (nextLine.substring(0, 8) == "940SWI04") {
-                    contents << nextLine.substring(90, 139) // Add 940SWI04 content
+                String nextCode = nextLine.substring(0, 8)
+                if (nextCode == "940SWI02") break
+                if (nextCode == "940SWI04") {
+                    if (nextLine.length() < 139) {
+                        failMalformed("BANK_LOAD: malformed 940SWI04 continuation row at index ${i + j}")
+                    }
+                    contents << nextLine.substring(90, 139)
                 }
             }
+            while (contents.size() < 5) { contents << '' }
 
-            // Ensure the content array has exactly 5 elements by padding with empty strings
-            while (contents.size() < 5) {
-                contents << ''
-            }
-
-            // Append to finalDataBuilder
             finalDataBuilder.append("\n")
                 .append(KUNDENUMMER).append(',')
                 .append(ACCOUNTNUMBER).append(',')
@@ -213,23 +295,19 @@ if(rule == "BANK_LOAD") {
                 .append(BELOP).append(',')
                 .append(AMOUNT).append(',')
                 .append(contents.join(','))
+            rowsWritten++
         }
     }
 
-    long endTime2 = System.nanoTime()
-    long duration2 = endTime2 - startTime2
-    logInfo("2nd For loop executed in: " + (duration2 / 1_000_000) + " ms")
-    logInfo("2nd For loop executed in: " + (duration2 / 1_000_000_000.0) + " seconds")
-
+    // Write intermediate result to temp file and stream-trim per field
     def myFile1 = new File(locationPath + 'ARCSInput.txt')
     myFile1.withWriter(encoding) { writer ->
         writer.write(finalDataBuilder.toString().trim())
     }
+    finalDataBuilder = null // release memory
 
     StringBuilder outputDataBuilder = new StringBuilder('KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5')
-    long startTime3 = System.nanoTime()
 
-    // Process each line from the file
     myFile1.withReader(encoding) { trimReader ->
         trimReader.eachLine { row ->
             String cleanedRow = row.split(',').collect { it.trim() }.join(',')
@@ -238,672 +316,462 @@ if(rule == "BANK_LOAD") {
     }
 
     String outputData = outputDataBuilder.toString().trim()
-
-    long endTime3 = System.nanoTime()
-    long duration3 = endTime3 - startTime3
-    logInfo("3rd For loop executed in: " + (duration3 / 1_000_000) + " ms")
-    logInfo("3rd For loop executed in: " + (duration3 / 1_000_000_000.0) + " seconds")
-
-    def myFile2 = new File(locationPath + 'ARCSInput2.txt')
-    myFile2.withWriter(encoding) { outputWriter ->
-        outputWriter.write(outputData) // Write once
-    }
-  
     myFile.delete()
     myFile1.delete()
-    myFile2.delete()
-
-    // Write the final output to the file
     outputFile.write(outputData)
 
     long fullRunTimeEnd = System.nanoTime()
     long fullDuration = fullRunTimeEnd - fullRunTimeStart
-    //def file = new File(filePath)
     def dst = new File(destLocation + fileName)
     copyFileWithEncoding(file, dst, encoding)
-    logInfo("Full runtime in: " + (fullDuration / 1_000_000) + " ms")
-    logInfo("Full runtime in: " + (fullDuration / 1_000_000_000.0) + " seconds")
+    logInfo("BANK_LOAD complete: ${rowsWritten} rows written. Full runtime: ${fullDuration / 1_000_000} ms")
 }
 
-//2. this block of code is for the OEBS bank file
-else if(rule == "OEBS_BANK_LOAD"){
-    locationPath = "/data/ar/dev/inbox/OracleGL"
-    destLocation = "/data/ar/dev/inbox/OracleGL/arkiv/"
-    filePath = ""
-    fileName = ""
-    def matchingFiles = []
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("GL2BETTY")){
-            filePath = file.getAbsolutePath()
-            fileName = file.getName()
-            fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
-            logInfo("Selected file name: ${fileName}")
-            logInfo("Selected file: ${filePath}")
-            logInfo("Selected file from substring: ${fileNameFromPath}")
-            logInfo("File Path from substring: ${filePath.substring(filePath.lastIndexOf("/") + 1)}")
-            matchingFiles << file
-        }
-    }
-    output = "Konto-Number;Reference1;Reference2;Debit;Credit;Date;Content1;Content2;Amount"
-    matchingFiles.each { file->
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
+// 2. OEBS_BANK_LOAD
+else if (rule == "OEBS_BANK_LOAD") {
+    logInfo("Starting rule: OEBS_BANK_LOAD")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/OracleGL"
+    def destLocation = "${baseRoot}/inbox/OracleGL/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("GL2BETTY") }
+
+    StringBuilder output = new StringBuilder("Konto-Number;Reference1;Reference2;Debit;Credit;Date;Content1;Content2;Amount")
+    int rowsWritten = 0
+
+    matchingFiles.each { file ->
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            // this section of code parses the string looking at the location of ; delimiter to grab specific debit and credit balances for each line and date
-            def deb_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            def deb_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-            def cred_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-            def cred_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1)
-            def date_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1)
-            def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1) + 1)
-            def debit 
-            if(line.substring(deb_pos_1+1,deb_pos_2) == ""){
-                debit = 0
-            }else{debit = Float.valueOf(line.substring(deb_pos_1+1,deb_pos_2))}
-            def credit
-            if(line.substring(cred_pos_1+1,cred_pos_2) == ""){
-                credit = 0
-            }else{credit = Float.valueOf(line.substring(cred_pos_1+1,cred_pos_2))}
-
-            def datestr = line.substring(date_pos_1 + 1, date_pos_2).trim()
-            def norwegianDateFormat = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Parsing with Norwegian locale
-            def date
-            try {
-                date = norwegianDateFormat.parse(datestr)
-            } catch (ParseException e) {
-                logError("Error parsing date: ${e.message}")
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            def debitStr  = getSemicolonField(line, 3) ?: ""
+            def creditStr = getSemicolonField(line, 4) ?: ""
+            def datestr   = getSemicolonField(line, 5)?.trim()
+            if (!datestr) {
+                failMalformed("OEBS_BANK_LOAD: missing or blank date field in line: '${line}' in file: ${file.getName()}")
             }
 
-            def sdf = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Formatting with English locale
-            def newdate = sdf.format(date)
+            def debit  = debitStr  == "" ? BigDecimal.ZERO : new BigDecimal(debitStr)
+            def credit = creditStr == "" ? BigDecimal.ZERO : new BigDecimal(creditStr)
 
-            // Replace the original date string with the newly formatted date in the line
+            def newdate = reformatDate(datestr, FMT_NO_SHORT, FMT_OUT_DATE)
+            if (newdate == null) failMalformed("OEBS_BANK_LOAD: failed to reformat date '${datestr}' in line: '${line}' in file: ${file.getName()}")
             line = line.replace(datestr, newdate)
-            output = output + '\n' + line + ';' + (debit + credit).toString()
+            output.append('\n').append(line).append(';').append((debit + credit).toPlainString())
+            rowsWritten++
         }
     }
-     outputFile.write(output)
+    outputFile.write(output.toString())
+    logInfo("OEBS_BANK_LOAD complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 3. this block of code loads the tiltak daglig file with only lines of type BESTTILLING
-else if(rule == "Tiltak_Daglig_Bestilling") {
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("Tiltak_Daglig")){
-            filePath = file.getAbsolutePath()
-            fileName = file.getName()
-            logInfo("Selected file name: ${fileName}")
-            logInfo("Selected file: ${filePath}")
-            matchingFiles << file
-        }
-    }
+// 3. Tiltak_Daglig_Bestilling
+else if (rule == "Tiltak_Daglig_Bestilling") {
+    logInfo("Starting rule: Tiltak_Daglig_Bestilling")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/daglig/"
+    def destLocation = "${baseRoot}/inbox/tiltak/daglig/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("Tiltak_Daglig") }
 
-    output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse"
-    matchingFiles.each { file-> 
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
+    StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse")
+    int rowsWritten = 0
+    matchingFiles.each { file ->
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
         def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)   
-        
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            def type_pos_1 = line.indexOf(";")
-            type_str = line.substring(0,type_pos_1)
-            if(type_str == 'BESTILLING' || line.startsWith("LT-BESTILLING") || line.trim().isEmpty()) {
-                def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-                def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-                datestr = line.substring(date_pos_1+1,date_pos_2)
-                date = new Date().parse("yyyy-MM-dd", datestr)
-                newdate = date.format("dd-MMM-yyyy")
-                line = line.replaceAll(datestr,newdate)
-                line = line.replaceAll('"',"")
-                output = output + '\n' + line + ";;"
+        copyFileWithEncoding(file, dst, encoding)
+
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            def type_str = getSemicolonField(line, 0)
+            if (type_str == 'BESTILLING' || line.startsWith("LT-BESTILLING")) {
+                def processed = reformatLineDate(line, FMT_ISO_DATE, FMT_OUT_DATE)
+                if (processed == null) continue
+                output.append('\n').append(processed).append(";;")
+                rowsWritten++
             }
         }
     }
-    outputFile.write(output)
-
+    outputFile.write(output.toString())
+    logInfo("Tiltak_Daglig_Bestilling complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-//4. This block of code loads the Tiltak Daglig Faktura file loading only lines with type FAKTURA
-else if(rule == "Tiltak_Daglig_Faktura") {
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-        file -> if(file.getName().contains("Tiltaksfaktura_Daglig")){
-            filePath = file.getAbsolutePath()
-            fileName = file.getName()
-            logInfo("Selected file name: ${fileName}")
-            logInfo("Selected file: ${filePath}")
-            matchingFiles << file
-        }
-    }
-    
-    output="Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer"
-    matchingFiles.each { file->
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
-        
+// 4. Tiltak_Daglig_Faktura
+else if (rule == "Tiltak_Daglig_Faktura") {
+    logInfo("Starting rule: Tiltak_Daglig_Faktura")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/daglig/"
+    def destLocation = "${baseRoot}/inbox/tiltak/daglig/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("Tiltaksfaktura_Daglig") }
+    StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer")
+    int rowsWritten = 0
+    matchingFiles.each { file ->
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+
         def combinedLines = []
         def currentLine = ""
-        
-        for(line in fileContents) {
-            if(line.startsWith("FAKTURA") || line.startsWith("LT-FAKTURA") || line.trim().isEmpty()) {
-                // If there's an existing accumulated line, add it to the list before starting a new one
-                if(currentLine) {
-                    combinedLines << currentLine
-                }
-                currentLine = line  // Start a new line
+        for (line in fileContents) {
+            if (line.startsWith("FAKTURA") || line.startsWith("LT-FAKTURA") || line.trim().isEmpty()) {
+                if (currentLine) combinedLines << currentLine
+                currentLine = line
             } else {
-                currentLine += line.trim()  // Append to the current line if it doesn't start with a keyword
+                currentLine += line.trim()
             }
         }
-        // Add the last accumulated line
-        if(currentLine) {
-            combinedLines << currentLine
-        }
-    
-        def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
-        
-        for(line in combinedLines) {
-            line = line.replaceAll(",",".")
-            def type_pos_1 = line.indexOf(";")
-            type_str = line.substring(0, type_pos_1)
+        if (currentLine) combinedLines << currentLine
 
-            if(type_str == "FAKTURA"|| type_str == "LT-FAKTURA") {
-                def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-                def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-                datestr = line.substring(date_pos_1+1, date_pos_2)
-                date = new Date().parse("yyyy-MM-dd", datestr)
-                newdate = date.format("dd-MMM-yyyy")
-                line = line.replaceAll(datestr, newdate)
-                line = line.replaceAll('"', "")
-                output = output + '\n' + line
-            }
-        }
-    }
-    outputFile.write(output)
-}
-
-
-//5. This block of code loads the LT tiltak avstemming daglig file loading only rows with type LT-tilsagn and status of Godkjent
-else if(rule == "Tiltak_Tilsagn_Arena_LT"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/LT/tilsagn"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/LT/tilsagn/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("LT_tiltak_avstemming_dag") || file.getName().contains("TILSAGN")){
-            filePath = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
-            matchingFiles << file
-        }
-    }   
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopenummer"
-    matchingFiles.each { file-> 
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            def type_pos_1 = line.indexOf(";")
-            type_str = line.substring(0,type_pos_1)
-            def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            def status_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-            status_str = line.substring(status_pos_1+1,status_pos_2)
-            if(status_str == "Godkjent"){
-                def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-                def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-                datestr = line.substring(date_pos_1+1,date_pos_2)
-                date = new Date().parse("yyyy-MM-dd", datestr)
-                newdate = date.format("dd-MMM-yyyy")
-                line = line.replaceAll(datestr,newdate)
-                line = line.replaceAll('"',"")
-                output = output + '\n' + line + ";;"
+        for (line in combinedLines) {
+            line = line.replace(",", ".")
+            def type_str = getSemicolonField(line, 0)
+            if (type_str == "FAKTURA" || type_str == "LT-FAKTURA") {
+                def processed = reformatLineDate(line, FMT_ISO_DATE, FMT_OUT_DATE)
+                if (processed == null) continue
+                output.append('\n').append(processed)
+                rowsWritten++
             }
         }
     }
-    outputFile.write(output)
+    outputFile.write(output.toString())
+    logInfo("Tiltak_Daglig_Faktura complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-//6. This code block loads the LT tiltak avstemming daglig file loading only rows with type LT-refusjon
-else if(rule == "Tiltak_Tilsagn_Arena_LT-refusjon"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/LT/refusjon"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/LT/refusjon/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("LT_tiltak_avstemming_dag")|| file.getName().contains("REFUSJON")){
-            filePath = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            println filePath
-            println filePath.substring(filePath.lastIndexOf("/") + 1)
-            matchingFiles << file
-        }
-    }
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer"
-matchingFiles.each { file->
-    def fileContents = file.newReader(encoding).readLines()
-    fileContents = filterNonEmptyLines(fileContents)
-    def dst = new File(destLocation + file.getName())
-    copyFileWithEncoding(file, dst, encoding)
+// 5. Tiltak_Tilsagn_Arena_LT – only rows with type LT-tilsagn and status Godkjent (filter added)
+else if (rule == "Tiltak_Tilsagn_Arena_LT") {
+    logInfo("Starting rule: Tiltak_Tilsagn_Arena_LT")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/daglig/LT/tilsagn"
+    def destLocation = "${baseRoot}/inbox/tiltak/daglig/LT/tilsagn/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("LT_tiltak_avstemming_dag") || it.contains("TILSAGN") }
 
-    for(line in fileContents) {
-        line = line.replaceAll(",",".")
-        def type_pos_1 = line.indexOf(";")
-        type_str = line.substring(0,type_pos_1)
-        if(type_str == "LT-refusjon"){
-            def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-            def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            datestr = line.substring(date_pos_1+1,date_pos_2)
-            date = new Date().parse("yyyy-MM-dd", datestr)
-            newdate = date.format("dd-MMM-yyyy")
-            line = line.replaceAll(datestr,newdate)
-            line = line.replaceAll('"',"")
-            output = output + '\n' + line + ";"
-        }
-    }
-}
-outputFile.write(output)
-}
-
-//7. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Annullert 
-else if(rule == "Tiltak_Tilsagn_Arena_Annul"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/annullert"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/annullert/arkiv/"
-    def matchingFiles = [] 
-    filePath = ""
-    fileName = ""
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("tiltak_avstemming_dag")){
-            filePath = file.getAbsolutePath()
-            matchingFiles << file
-        }
-    }
-
-    if (matchingFiles.isEmpty()) {
-        println "No files matching the pattern found in the directory."
-        return
-    }
-
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
+    StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopenummer")
+    int rowsWritten = 0
     matchingFiles.each { file ->
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
-        
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            def type_pos_1 = line.indexOf(";")
-            type_str = line.substring(0,type_pos_1)
-            def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            def status_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-            status_str = line.substring(status_pos_1+1,status_pos_2)
-            if(type_str == 'Tilsagn' && status_str == "Annullert"){
-                def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-                def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-                datestr = line.substring(date_pos_1+1,date_pos_2)
-                date = new SimpleDateFormat("dd-MM-yyyy").parse(datestr)
-                newdate = new SimpleDateFormat("dd-MMM-yyyy").format(date)
-                line = line.replaceAll(datestr,newdate)
-                line = line.replaceAll('"',"")
-                output = output + '\n' + line + ";"
-            }
-        }
-        def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
-    }
-    outputFile.write(output)
-}
-
-//8. This code block loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Refusjonskrav 
-else if(rule == "Tiltak_RefKrav_Arena"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/refusjon/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("tiltak_avstemming_dag")){
-            filePath = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            logInfo("Selected file: ${filePath}")
-            logInfo("Selected file from substring: ${fileName}")
-            matchingFiles << file
-         }
-    }
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
-    matchingFiles.each { file-> 
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            def type_pos_1 = line.indexOf(";")
-            type_str = line.substring(0,type_pos_1)
-            def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            def status_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-            status_str = line.substring(status_pos_1+1,status_pos_2)
-            if(type_str == "Refusjonskrav"){
-                def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-                def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-                datestr = line.substring(date_pos_1+1,date_pos_2)
-                date = new SimpleDateFormat("dd-MM-yyyy").parse(datestr)
-                newdate = new SimpleDateFormat("dd-MMM-yyyy").format(date)
-                line = line.replaceAll(datestr,newdate)
-                line = line.replaceAll('"',"")
-                output = output + '\n' + line
-                logInfo("line to be added to output: ${line}")
-                logInfo("output: ${output}")
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            def type_str   = getSemicolonField(line, 0)
+            def status_str = getSemicolonField(line, 3)
+
+            if (type_str == "LT-tilsagn" && status_str == "Godkjent") {
+                def processed = reformatLineDate(line, FMT_ISO_DATE, FMT_OUT_DATE)
+                if (processed == null) continue
+                output.append('\n').append(processed).append(";;")
+                rowsWritten++
             }
         }
     }
-    outputFile.write(output)
+    outputFile.write(output.toString())
+    logInfo("Tiltak_Tilsagn_Arena_LT complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 9. This block of code loads the Tilsagn avsetemming daglig tiltak file, loading only rows with type Tilsagn and status Attestert
-else if(rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent"){
-    locationPath = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/"
-    destLocation = "/data/ar/dev/inbox/tiltak/daglig/arena/tilsagn/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("tiltak_avstemming_dag")){
-            filePath = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            logInfo("Selected file: ${filePath}")
-            logInfo("Selected file from substring: ${fileName}")
-            matchingFiles << file
-         }
-    }
-    output="Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer"
+// 6. Tiltak_Tilsagn_Arena_LT-refusjon
+else if (rule == "Tiltak_Tilsagn_Arena_LT-refusjon") {
+    logInfo("Starting rule: Tiltak_Tilsagn_Arena_LT-refusjon")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/daglig/LT/refusjon"
+    def destLocation = "${baseRoot}/inbox/tiltak/daglig/LT/refusjon/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("LT_tiltak_avstemming_dag") || it.contains("REFUSJON") }
+    StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer")
+    int rowsWritten = 0
+
     matchingFiles.each { file ->
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
-        def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
-        
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            def type_pos_1 = line.indexOf(";")
-            type_str = line.substring(0,type_pos_1)
-            def status_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            def status_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-            status_str = line.substring(status_pos_1+1,status_pos_2)
-            if(type_str == "Tilsagn" && status_str == "Godkjent"){
-                def date_pos_1 = line.indexOf(";", line.indexOf(";") + 1)
-                def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-                datestr = line.substring(date_pos_1+1,date_pos_2)
-                date = new SimpleDateFormat("dd-MM-yyyy").parse(datestr)
-                newdate = new SimpleDateFormat("dd-MMM-yyyy").format(date)
-                line = line.replaceAll(datestr,newdate)
-                line = line.replaceAll('"',"")
-                output = output + '\n' + line
-            }
-        }
-    }
-    outputFile.write(output)
-}
-
-// 11. This block of code loads data from the Tiltakl Maanedlig_OEBS files
-else if(rule == "Tiltak_Manedlig_OEBS"){
-    locationPath = "/data/ar/dev/inbox/tiltak/maanedlig/"
-    destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("Tiltak_Maanedlig")){
-            filePath = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            logInfo("Selected file: ${filePath}")
-            logInfo("Selected file from substring: ${fileName}")
-            matchingFiles << file
-        }
-    }
-
-    // define header row for the file
-    output="Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
-    matchingFiles.each { file ->
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
-        
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-
-            //belop1 refererer til navnet i ARCS, i filen gjelder dette belop2
-            def belop1pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1
-            def belop1pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-            def belop1 = line.substring(belop1pos1, belop1pos2).trim()
-
-            if(!belop1 || belop1 == 0 || belop1 == "0"){
-                logInfo("belop1 inside check: ${belop1}")
-            continue
-            }
-
-            def datestr = line.substring(19,28).trim()
-            def norwegianDateFormat = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("no")) // Parsing with Norwegian locale
-            def date
-            try {
-                date = norwegianDateFormat.parse(datestr)
-            } catch (ParseException e) {
-                logError("Error parsing date: ${e.message}")
-            }
-            def sdf = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Formatting with English locale
-            def newdate = sdf.format(date)
-            // Replace the original date string with the newly formatted date in the line
-            line = line.replace(datestr, newdate)
-            output = output +'\n' + line
-        }
-        def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
-    }
-    outputFile.write(output)
-}
-
-// 12. This block of code loads data from the Manedlig_Arena file
-else if(rule == "Tiltak_Manedlig"){
-    locationPath = "/data/ar/dev/inbox/tiltak/maanedlig"
-    destLocation = "/data/ar/dev/inbox/tiltak/maanedlig/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-         file -> if(file.getName().contains("tiltak_avstemming_mnd")){
-            filePath = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            logInfo("Selected file: ${filePath}")
-            logInfo("Selected file from substring: ${fileName}")
-            matchingFiles << file
-        }
-    }
-    
-    // define header row for the file
-    output="Dato;Referanse;Year;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer"
-    matchingFiles.each { file-> 
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
-        def dst = new File(destLocation + file.getName())
-        copyFileWithEncoding(file, dst, encoding)
-        
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            //belop1 refererer til navnet i ARCS, i filen gjelder dette belop2
-            def belop1pos1 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) + 1
-            def belop1pos2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1) +1)
-            def belop1 = line.substring(belop1pos1, belop1pos2).trim()
-            
-            if(!belop1 || belop1 == 0 || belop1 == "0"){
-                logInfo("belop1: ${belop1}")
-            continue
-            }
-
-            datestr = line.substring(0,10)
-            date = new SimpleDateFormat("dd-MM-yyyy").parse(datestr)
-            newdate = new SimpleDateFormat("dd-MMM-yyyy").format(date)
-            line = line.replaceAll(datestr,newdate.toString())
-            output = output +'\n' + line
-        }
-    }
-    outputFile.write(output)
-}
-
-// 13. This block of code loads data from the OB04 Grensesnitt file
-else if(rule == "Grensesnitt"){
-    locationPath = "/data/ar/dev/inbox/grensesnitt"
-    destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/"
-    filePath = ""
-    fileName = ""
-    matchingFiles = []
-    new File(locationPath).eachFile() { 
-        file -> if(file.getName().contains("OB04")){
-            filePath = file.getAbsolutePath()
-            fileName = filePath.substring(filePath.lastIndexOf("/") + 1)
-            logInfo("Selected file: ${filePath}")
-            logInfo("Selected file from substring: ${fileName}")
-            matchingFiles << file
-        }
-    }
-    output = "ref1,vedtaksID,belop_file,dato_overfort,person_nr,FOM,TOM,ytelseskonto,ref2,dato,kostnadssted,ansvarssted,ref3,rente1,rente2,ref4,fagsystem_ID"
-    matchingFiles.each { file ->
-        def fileContents = file.newReader(encoding).readLines()
-        fileContents = filterNonEmptyLines(fileContents)
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
-        // define header row for the file and set the comma-delimited output headers for the output file
-        def ref1 = ""
-        def vedtaksID = ""
-        def belop_file = ""
-        def dato_overfort = ""
-        def person_nr = ""
-        def FOM = ""
-        def TOM = ""	
-        def ytelseskonto = ""
-        def ref2 = ""
-        def dato = ""
-        def kostnadssted = ""
-        def ansvarssted = ""
-        def ref3 = ""
-        def rente1 = ""
-        def rente2 = ""
-        def ref4 = ""
-        def fagsystem_ID = ""
-
-        // loop through each line in the file contents - each line is split using defined substring characters below
-        for(line in fileContents) {
-            line = line.replaceAll(",",".")
-            // check if it is a line we want to load or a header line we want to ignore
-            if(line.substring(22,23) != " "){
-                ref1 = line.substring(0,15)
-                vedtaksID = line.substring(19,25)
-                belop_file = line.substring(29,40)
-                def aDate = new Date().parse("yyyyMMdd",line.substring(40,48))
-                dato_overfort = aDate.format("dd-MMM-yyyy")
-                personNr = line.substring(48,59)
-                FOM = line.substring(59,67)
-                TOM = line.substring(67,75)
-                ytelseskonto = line.substring(75,80)
-                ref2 = line.substring(83,97)
-                def bDate = new Date().parse("yyyyMMdd",line.substring(101,109))
-                dato = bDate.format("dd-MMM-yyyy")
-                kostnadssted = line.substring(109,113)
-                ansvarssted = line.substring(113,117)
-                ref3 = line.substring(117,124)
-                rente1 = line.substring(140,155)
-                rente2 = line.substring(155,162)
-                ref4 = line.substring(162,170)
-                fagsystem_ID = line.substring(170,179)
-                // create comma delimited line to be loaded
-                newline = ref1 + "," + vedtaksID + "," + belop_file + "," + dato_overfort + "," + personNr + "," + FOM + "," + TOM + "," + ytelseskonto + "," + ref2 + "," + dato + "," + kostnadssted + "," + ansvarssted + "," + ref3 + "," + rente1 + "," + rente2 + "," + ref4 + "," + fagsystem_ID
-                // add new line to the cummulating output string
-                output = output + "\n" + newline
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            def type_str = getSemicolonField(line, 0)
+            if (type_str == "LT-refusjon") {
+                def processed = reformatLineDate(line, FMT_ISO_DATE, FMT_OUT_DATE)
+                if (processed == null) continue
+                output.append('\n').append(processed).append(";")
+                rowsWritten++
             }
         }
     }
-    outputFile.write(output)
+    outputFile.write(output.toString())
+    logInfo("Tiltak_Tilsagn_Arena_LT-refusjon complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-//14. This block of code loads data from the Fagsystem Grensesnitt files.
-else if(rule == "Grensesnitt_fag"){
-    locationPath = "/data/ar/dev/inbox/grensesnitt"
-    destLocation = "/data/ar/dev/inbox/grensesnitt/arkiv/"
-    def encodingFag = "UTF-8"
-    def matchingFiles = []
-    filePath = ""
-    fileName = ""
-    new File(locationPath).eachFile() { 
-        file -> if(file.getName().contains("tilbake-p") || file.getName().contains("navi")){
-            filePath = file.getAbsolutePath()
-            logInfo("file path: ${filePath}")
-            matchingFiles << file
-        }
-    }
+// 7. Tiltak_Tilsagn_Arena_Annul
+else if (rule == "Tiltak_Tilsagn_Arena_Annul") {
+    logInfo("Starting rule: Tiltak_Tilsagn_Arena_Annul")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/daglig/arena/tilsagn/annullert"
+    def destLocation = "${baseRoot}/inbox/tiltak/daglig/arena/tilsagn/annullert/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("tiltak_avstemming_dag") }
 
     if (matchingFiles.isEmpty()) {
         logError("No files matching the pattern found in the directory.")
         return
     }
 
-    // define header row for the file
-    def output="avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjøringTilIngenTilbakekreving"
+    StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer")
+    int rowsWritten = 0
+    matchingFiles.each { file ->
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            def type_str   = getSemicolonField(line, 0)
+            def status_str = getSemicolonField(line, 3)
+            if (type_str == 'Tilsagn' && status_str == "Annullert") {
+                def processed = reformatLineDate(line, FMT_DD_MM_DATE, FMT_OUT_DATE)
+                if (processed == null) continue
+                output.append('\n').append(processed).append(";")
+                rowsWritten++
+            }
+        }
+        def dst = new File(destLocation + file.getName())
+        copyFileWithEncoding(file, dst, encoding)
+    }
+    outputFile.write(output.toString())
+    logInfo("Tiltak_Tilsagn_Arena_Annul complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
+}
+
+// 8. Tiltak_RefKrav_Arena
+else if (rule == "Tiltak_RefKrav_Arena") {
+    logInfo("Starting rule: Tiltak_RefKrav_Arena")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/daglig/arena/refusjon/"
+    def destLocation = "${baseRoot}/inbox/tiltak/daglig/arena/refusjon/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("tiltak_avstemming_dag") }
+
+    StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer")
+    int rowsWritten = 0
+    matchingFiles.each { file ->
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def dst = new File(destLocation + file.getName())
+        copyFileWithEncoding(file, dst, encoding)
+
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            def type_str = getSemicolonField(line, 0)
+            if (type_str == "Refusjonskrav") {
+                def processed = reformatLineDate(line, FMT_DD_MM_DATE, FMT_OUT_DATE)
+                if (processed == null) continue
+                output.append('\n').append(processed)
+                rowsWritten++
+            }
+        }
+    }
+    outputFile.write(output.toString())
+    logInfo("Tiltak_RefKrav_Arena complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
+}
+
+// 9. Tiltak_RefKrav_Arena_Tilsagn_Godkjent
+else if (rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent") {
+    logInfo("Starting rule: Tiltak_RefKrav_Arena_Tilsagn_Godkjent")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/daglig/arena/tilsagn/"
+    def destLocation = "${baseRoot}/inbox/tiltak/daglig/arena/tilsagn/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("tiltak_avstemming_dag") }
+
+    StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer")
+    int rowsWritten = 0
+    matchingFiles.each { file ->
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def dst = new File(destLocation + file.getName())
+        copyFileWithEncoding(file, dst, encoding)
+
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            def type_str   = getSemicolonField(line, 0)
+            def status_str = getSemicolonField(line, 3)
+            if (type_str == "Tilsagn" && status_str == "Godkjent") {
+                def processed = reformatLineDate(line, FMT_DD_MM_DATE, FMT_OUT_DATE)
+                if (processed == null) continue
+                output.append('\n').append(processed)
+                rowsWritten++
+            }
+        }
+    }
+    outputFile.write(output.toString())
+    logInfo("Tiltak_RefKrav_Arena_Tilsagn_Godkjent complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
+}
+
+// 11. Tiltak_Manedlig_OEBS
+else if (rule == "Tiltak_Manedlig_OEBS") {
+    logInfo("Starting rule: Tiltak_Manedlig_OEBS")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/maanedlig/"
+    def destLocation = "${baseRoot}/inbox/tiltak/maanedlig/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("Tiltak_Maanedlig") }
+    StringBuilder output = new StringBuilder("Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer")
+    int rowsWritten = 0
+    int rowsSkipped = 0
 
     matchingFiles.each { file ->
-        def fileContents = file.newReader(encodingFag).readLines()
-        logInfo("File header: ${fileContents.get(1)}")
-        fileContents = fileContents.drop(1)
-        fileContents = filterNonEmptyLines(fileContents)
-        
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+
         for (line in fileContents) {
-            line = line.replaceAll(",",".")
-            def date_pos_1 = line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1)
-            def date_pos_2 = line.indexOf(";", line.indexOf(";", line.indexOf(";", line.indexOf(";") + 1) + 1) + 1)
-            def datestr = line.substring(date_pos_1 + 1, date_pos_2)
-            def date = new Date().parse("yyyyMMdd", datestr)
-            def newdate = date.format("dd-MMM-yyyy")
-            line = line.replaceAll(datestr, newdate)
-            output = output + '\n' + line
+            line = line.replace(",", ".")
+            def belop1 = getSemicolonField(line, 3)?.trim()
+
+            if (!belop1 || belop1 == 0 || belop1 == "0") {
+                rowsSkipped++
+                continue
+            }
+
+            if (line.length() < 28) {
+                failMalformed("Tiltak_Manedlig_OEBS: malformed fixed-width row (expected at least 28 chars)")
+            }
+
+            def datestr = line.substring(19, 28).trim()
+            def newdate = reformatDate(datestr, FMT_NO_SHORT, FMT_OUT_DATE)
+            if (newdate == null) continue
+            line = line.replace(datestr, newdate)
+            output.append('\n').append(line)
+            rowsWritten++
+        }
+        def dst = new File(destLocation + file.getName())
+        copyFileWithEncoding(file, dst, encoding)
+    }
+    outputFile.write(output.toString())
+    logInfo("Tiltak_Manedlig_OEBS complete: ${rowsWritten} rows written, ${rowsSkipped} rows skipped (zero/empty amount). Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
+}
+
+// 12. Tiltak_Manedlig
+else if (rule == "Tiltak_Manedlig") {
+    logInfo("Starting rule: Tiltak_Manedlig")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/tiltak/maanedlig"
+    def destLocation = "${baseRoot}/inbox/tiltak/maanedlig/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("tiltak_avstemming_mnd") }
+    StringBuilder output = new StringBuilder("Dato;Referanse;Year;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer")
+    int rowsWritten = 0
+    int rowsSkipped = 0
+
+    matchingFiles.each { file ->
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def dst = new File(destLocation + file.getName())
+        copyFileWithEncoding(file, dst, encoding)
+
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            def belop1 = getSemicolonField(line, 4)?.trim()
+
+            if (!belop1 || belop1 == 0 || belop1 == "0") {
+                rowsSkipped++
+                continue
+            }
+
+            if (line.length() < 10) {
+                failMalformed("Tiltak_Manedlig: malformed fixed-width row (expected at least 10 chars)")
+            }
+
+            def datestr = line.substring(0, 10)
+            def newdate = reformatDate(datestr, FMT_DD_MM_DATE, FMT_OUT_DATE)
+            if (newdate == null) continue
+            line = line.replace(datestr, newdate)
+            output.append('\n').append(line)
+            rowsWritten++
+        }
+    }
+    outputFile.write(output.toString())
+    logInfo("Tiltak_Manedlig complete: ${rowsWritten} rows written, ${rowsSkipped} rows skipped (zero/empty amount). Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
+}
+
+// 13. Grensesnitt
+else if (rule == "Grensesnitt") {
+    logInfo("Starting rule: Grensesnitt")
+    long ruleStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/grensesnitt"
+    def destLocation = "${baseRoot}/inbox/grensesnitt/arkiv/"
+    def matchingFiles = findFiles(locationPath) { it.contains("OB04") }
+    StringBuilder output = new StringBuilder("ref1,vedtaksID,belop_file,dato_overfort,person_nr,FOM,TOM,ytelseskonto,ref2,dato,kostnadssted,ansvarssted,ref3,rente1,rente2,ref4,fagsystem_ID")
+    int rowsWritten = 0
+
+    matchingFiles.each { file ->
+        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def dst = new File(destLocation + file.getName())
+        copyFileWithEncoding(file, dst, encoding)
+
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            if (line.length() < 23) {
+                failMalformed("Grensesnitt: malformed fixed-width row (expected at least 23 chars)")
+            }
+            if (line.substring(22, 23) != " ") {
+                if (line.length() < 179) {
+                    failMalformed("Grensesnitt: malformed fixed-width row (expected at least 179 chars)")
+                }
+                def ref1         = line.substring(0, 15)
+                def vedtaksID    = line.substring(19, 25)
+                def belop_file   = line.substring(29, 40)
+                def aDate        = FMT_COMPACT_DATE.parse(line.substring(40, 48))
+                def dato_overfort = FMT_OUT_DATE.format(aDate)
+                def personNr     = line.substring(48, 59)
+                def FOM          = line.substring(59, 67)
+                def TOM          = line.substring(67, 75)
+                def ytelseskonto = line.substring(75, 80)
+                def ref2         = line.substring(83, 97)
+                def bDate        = FMT_COMPACT_DATE.parse(line.substring(101, 109))
+                def dato         = FMT_OUT_DATE.format(bDate)
+                def kostnadssted = line.substring(109, 113)
+                def ansvarssted  = line.substring(113, 117)
+                def ref3         = line.substring(117, 124)
+                def rente1       = line.substring(140, 155)
+                def rente2       = line.substring(155, 162)
+                def ref4         = line.substring(162, 170)
+                def fagsystem_ID = line.substring(170, 179)
+                def newline      = [ref1, vedtaksID, belop_file, dato_overfort, personNr,
+                                    FOM, TOM, ytelseskonto, ref2, dato, kostnadssted,
+                                    ansvarssted, ref3, rente1, rente2, ref4, fagsystem_ID].join(",")
+                output.append('\n').append(newline)
+                rowsWritten++
+            }
+        }
+    }
+    outputFile.write(output.toString())
+    logInfo("Grensesnitt complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
+}
+
+// 14. Grensesnitt_fag
+else if (rule == "Grensesnitt_fag") {
+    logInfo("Starting rule: Grensesnitt_fag")
+    long ruleStart = System.nanoTime()
+    def locationPath  = "${baseRoot}/inbox/grensesnitt"
+    def destLocation  = "${baseRoot}/inbox/grensesnitt/arkiv/"
+    def encodingFag   = "UTF-8"
+    def matchingFiles = findFiles(locationPath) { it.contains("tilbake-p") || it.contains("navi") }
+
+    if (matchingFiles.isEmpty()) {
+        logError("No files matching the pattern found in the directory.")
+        return
+    }
+
+    StringBuilder output = new StringBuilder("avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjøringTilIngenTilbakekreving")
+    int rowsWritten = 0
+
+    matchingFiles.each { file ->
+        def fileContents = readAllLines(file, encodingFag)
+        logInfo("Grensesnitt_fag: skipping header row in file ${file.getName()}")
+        fileContents = filterNonEmptyLines(fileContents.drop(1))
+
+        for (line in fileContents) {
+            line = line.replace(",", ".")
+            // Dato ligger i felt 3 (mellom 3. og 4. semikolon) i fagsystem-filen – ikke felt 2 som i øvrige regler
+            def datestr = getSemicolonField(line, 3)
+            def newdate = reformatDate(datestr, FMT_COMPACT_DATE, FMT_OUT_DATE)
+            if (newdate == null) continue
+            line = line.replace(datestr, newdate)
+            output.append('\n').append(line)
+            rowsWritten++
         }
 
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encodingFag)
     }
-    outputFile.write(output)
-}
-
-// Define a reusable method for copying files with a specified encoding
-def copyFileWithEncoding(File src, File dst, String encoding) {
-    src.withReader(encoding) { reader ->
-        dst.withWriter(encoding) { writer ->
-            writer << reader // Copy content with the specified encoding
-        }
-    }
-    src.delete() // Optionally delete the source file after copying
-}
-
-// Method to filter out blank lines or lines with only whitespace
-def filterNonEmptyLines(List<String> lines) {
-    return lines.findAll { line -> !line.trim().isEmpty() }
+    outputFile.write(output.toString())
+    logInfo("Grensesnitt_fag complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
 def isLegacyBankFile(File file) {
