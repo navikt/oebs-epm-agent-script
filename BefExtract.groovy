@@ -1,5 +1,6 @@
 import groovy.xml.XmlSlurper
 
+import java.math.RoundingMode
 import java.text.SimpleDateFormat
 import java.text.ParseException
 
@@ -7,78 +8,16 @@ import java.text.ParseException
 agentAPI.skipAction('true')
 
 // Get bind variables - Rule variable determines which block of code runs.
-bindVariables = agentAPI.getBindVariables()
-rule = bindVariables["Rule"]
+def bindVariables = agentAPI.getBindVariables()
+def rule = bindVariables["Rule"]
 String outFileName = agentContext["DATAFILENAME"] as String
-outputFile = new File(outFileName)
+File outputFile = new File(outFileName)
 String encoding = "ISO-8859-1"
 
 // Logging helpers
 def logInfo  = { msg -> println "[EXTRACT][INFO]  ${msg}" }
 def logWarn  = { msg -> println "[EXTRACT][WARN]  ${msg}" }
 def logError = { msg -> println "[EXTRACT][ERROR] ${msg}" }
-// 0. Camt.053
-if(rule == "CAMT053_LOAD"){
-    long fullRunTimeStart = System.nanoTime()
-    locationPath = "/data/ar/dev/inbox/bank/camt053/"
-    destLocation = "/data/ar/dev/inbox/bank/camt053/arkiv/"
-    filePath = ""
-    fileName = ""
-
-    def header = 'KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5'
-
-    def folder = new File(locationPath)
-    if (!folder.exists()) {
-        def msg = "CAMT053_LOAD: Directory not found: ${locationPath}"
-        logError(msg)
-        outputFile.write(header, "UTF-8")
-        throw new RuntimeException(msg)
-    }
-
-    def matchingFiles = (folder.listFiles() ?: [])
-        .findAll { file -> isCamt053File(file) }
-        .sort { [it.lastModified(), it.getName()] }
-
-    if (matchingFiles.isEmpty()) {
-        logWarn("No matching CAMT.053 files found in: ${locationPath} — writing empty output.")
-        outputFile.write(header, "UTF-8")
-        return
-    }
-
-    StringBuilder outputBuilder = new StringBuilder()
-    boolean firstFile = true
-
-    matchingFiles.each { file ->
-        filePath = file.getAbsolutePath()
-        fileName = file.getName()
-        fileNameFromPath = filePath.substring(filePath.lastIndexOf("/") + 1)
-        logInfo("Selected file name: ${fileName}")
-        logInfo("Selected file: ${filePath}")
-        logInfo("Processing CAMT053 file: ${fileName}")
-
-        String fileOutput = buildCamt053Output(file, logInfo, logWarn)
-
-        if (firstFile) {
-            outputBuilder.append(fileOutput)
-            firstFile = false
-        } else {
-            // Hopp over header-linje for påfølgende filer
-            def lines = fileOutput.split('\n') as List
-            outputBuilder.append('\n').append(lines.drop(1).join('\n'))
-        }
-
-        def dst = new File(destLocation + fileName)
-        copyFileWithEncoding(file, dst, "UTF-8")
-        logInfo("File archived to: ${dst.getAbsolutePath()}")
-    }
-
-    outputFile.write(outputBuilder.toString(), "UTF-8")
-    logInfo("Output written to: ${outFileName}")
-
-    long fullRunTimeEnd = System.nanoTime()
-    long fullDuration = fullRunTimeEnd - fullRunTimeStart
-    logInfo("CAMT053 processing completed in: " + (fullDuration / 1_000_000) + " ms")
-}
 
 // Temporary verification toggle for runtime path detection.
 boolean DEBUG_PATH_VERIFICATION = false
@@ -86,6 +25,10 @@ boolean DEBUG_PATH_VERIFICATION = false
 def failMalformed(String message) {
     logError(message)
     throw new IllegalStateException(message)
+}
+
+def writeOutput = { String data, String enc = encoding ->
+    outputFile.write(data ?: "", enc)
 }
 
 String runDir = System.getProperty("user.dir") ?: ""
@@ -108,28 +51,35 @@ if (DEBUG_PATH_VERIFICATION) {
 
 def findFiles(String locationPath, Closure nameMatcher) {
     def dir = new File(locationPath)
-    if (!dir.exists()) {
+    if (!dir.exists() || !dir.isDirectory()) {
         logError("Directory not found: ${locationPath}")
         return ([] as List<File>)
     }
     List<File> result = []
     dir.eachFile { File file ->
-        if (nameMatcher(file.getName())) {
+        if (file.isFile() && nameMatcher(file.getName())) {
             logInfo("Selected file: ${file.getAbsolutePath()}")
             result << file
         }
     }
-    return result
+    return result.sort { a, b -> a.getName().toLowerCase(Locale.ROOT) <=> b.getName().toLowerCase(Locale.ROOT) }
 }
 
 // Copy file with encoding, then delete source
 def copyFileWithEncoding(File src, File dst, String enc) {
+    File parent = dst.getParentFile()
+    if (parent && !parent.exists() && !parent.mkdirs()) {
+        failMalformed("Could not create destination directory: ${parent.getAbsolutePath()}")
+    }
+
     src.withReader(enc) { reader ->
         dst.withWriter(enc) { writer ->
             writer << reader
         }
     }
-    src.delete()
+    if (!src.delete()) {
+        logWarn("Could not delete source file after archive copy: ${src.getAbsolutePath()}")
+    }
 }
 
 // Filter out blank lines or lines with only whitespace
@@ -144,6 +94,34 @@ def readAllLines(File file, String enc) {
         lines = reader.readLines()
     }
     return lines
+}
+
+// Read only a small preview to identify XML type without loading the full file.
+def readFilePreview(File file, String enc, int maxLines = 40) {
+    file.withReader(enc) { reader ->
+        def lines = []
+        for (int i = 0; i < maxLines; i++) {
+            def line = reader.readLine()
+            if (line == null) break
+            lines << line
+        }
+        return lines.join("\n")
+    }
+}
+
+// CAMT053 files in this flow can have generic names (for example GUID-content.xml),
+// so we detect based on namespace/content instead of filename pattern.
+def isCamt053File(File file) {
+    if (!file?.isFile()) return false
+    if (!file.getName().toLowerCase(Locale.ROOT).endsWith(".xml")) return false
+
+    try {
+        def preview = readFilePreview(file, "UTF-8", 60).toLowerCase(Locale.ROOT)
+        return preview.contains("urn:iso:std:iso:20022:tech:xsd:camt.053") ||
+            preview.contains("camt.053")
+    } catch (Exception ignored) {
+        return false
+    }
 }
 
 // Parse a date string from one format and return it formatted in another.
@@ -181,6 +159,225 @@ def reformatLineDate(String line, SimpleDateFormat parseFormat, SimpleDateFormat
     return line.replace(datestr, newdate).replace('"', "")
 }
 
+def isZeroOrBlankAmount(String amountText) {
+    def normalized = amountText?.trim()?.replace(',', '.')
+    if (!normalized) return true
+
+    try {
+        return new BigDecimal(normalized).compareTo(BigDecimal.ZERO) == 0
+    } catch (Exception ignored) {
+        return false
+    }
+}
+
+def buildCamt053Output(File file, Closure logInfo, Closure logWarn) {
+    def xml = new XmlSlurper(false, false).parse(file)
+    def header = 'KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5'
+    def rows = []
+
+    def kundeNummer = firstNonBlank([
+        xml.BkToCstmrStmt.GrpHdr.MsgRcpt.Id.OrgId.Othr.find { it.SchmeNm.Cd.text() == 'CUST' }?.Id?.text(),
+        xml.BkToCstmrStmt.Stmt?.find { true }?.Acct?.Ownr?.Id?.OrgId?.Othr?.find { true }?.Id?.text()
+    ])
+
+    int statementCount = 0
+    xml.BkToCstmrStmt.Stmt.each { stmt ->
+        statementCount++
+
+        def accountNumber = normalizeAccountNumber(firstNonBlank([
+            stmt.Acct.Id.IBAN.text(),
+            stmt.Acct.Id.Othr.Id.text()
+        ]))
+        def statementCurrency = firstNonBlank([stmt.Acct.Ccy.text(), 'NOK'])
+
+        stmt.Ntry.each { ntry ->
+            def direction = firstNonBlank([ntry.CdtDbtInd.text(), 'CRDT'])
+            def bookingDate = formatCamtDate(ntry.BookgDt.Dt.text(), logWarn)
+            def txDetails = ntry.NtryDtls.TxDtls
+
+            if (!txDetails || txDetails.size() == 0) {
+                def signedAmount = formatSignedAmount(ntry.Amt.text(), direction, logWarn)
+                rows << toCsvLine([
+                    kundeNummer,
+                    accountNumber,
+                    firstNonBlank([ntry.Amt.@Ccy.text(), statementCurrency]),
+                    bookingDate,
+                    toOreAmount(signedAmount, logWarn),
+                    signedAmount,
+                    firstNonBlank([ntry.NtryRef.text(), ntry.AcctSvcrRef.text()]),
+                    '',
+                    '',
+                    buildBankContent5(ntry, direction),
+                    ''
+                ])
+                return
+            }
+
+            txDetails.each { txDtls ->
+                def signedAmount = formatSignedAmount(
+                    firstNonBlank([txDtls.AmtDtls.TxAmt.Amt.text(), ntry.Amt.text()]),
+                    direction,
+                    logWarn
+                )
+
+                def remittanceLines = txDtls.RmtInf.Ustrd.collect { it.text() }.findAll { it }
+                def remittanceDeduped = remittanceLines.inject([]) { acc, v ->
+                    (acc.isEmpty() || acc.last() != v) ? acc + v : acc
+                }
+                def remittanceText = collapseWhitespace(remittanceDeduped.join(''))
+                if (!remittanceText) {
+                    remittanceText = collapseWhitespace(txDtls.AddtlTxInf.text())
+                }
+
+                def content1 = (remittanceText == 'OVERF. NORGES BANK')
+                    ? extractRelatedAccount(txDtls.RltdPties.DbtrAcct)
+                    : firstNonBlank([
+                        txDtls.Refs.ClrSysRef.text(),
+                        txDtls.Refs.EndToEndId.text(),
+                        txDtls.Refs.TxId.text(),
+                        txDtls.Refs.AcctSvcrRef.text(),
+                        ntry.AcctSvcrRef.text(),
+                        ntry.NtryRef.text()
+                    ])
+
+                rows << toCsvLine([
+                    kundeNummer,
+                    accountNumber,
+                    firstNonBlank([txDtls.AmtDtls.TxAmt.Amt.@Ccy.text(), ntry.Amt.@Ccy.text(), statementCurrency]),
+                    bookingDate,
+                    toOreAmount(signedAmount, logWarn),
+                    signedAmount,
+                    content1,
+                    remittanceText,
+                    findCounterpartyName(txDtls, direction),
+                    buildBankContent5(ntry, direction),
+                    ''
+                ])
+            }
+        }
+    }
+
+    logInfo("Processed CAMT.053 file '${file.getName()}' with ${statementCount} statements and ${rows.size()} output rows.")
+    return ([header] + rows).join('\n')
+}
+
+def findCounterpartyName(txDtls, String direction) {
+    if (direction == 'DBIT') {
+        return firstNonBlank([
+            txDtls.RltdPties.Cdtr.Nm.text(),
+            txDtls.RltdPties.UltmtCdtr.Nm.text(),
+            txDtls.RltdPties.Dbtr.Nm.text()
+        ])
+    }
+
+    return firstNonBlank([
+        txDtls.RltdPties.Dbtr.Nm.text(),
+        txDtls.RltdPties.UltmtDbtr.Nm.text(),
+        txDtls.RltdPties.Cdtr.Nm.text()
+    ])
+}
+
+def extractRelatedAccount(accountNode) {
+    return normalizeAccountNumber(firstNonBlank([
+        accountNode?.Id?.IBAN?.text(),
+        accountNode?.Id?.Othr?.Id?.text()
+    ]))
+}
+
+def buildBankContent5(ntry, String direction) {
+    return [
+        ntry.BkTxCd.Prtry.Cd.text(),
+        ntry.BkTxCd.Domn.Cd.text(),
+        ntry.BkTxCd.Domn.Fmly.Cd.text(),
+        ntry.BkTxCd.Domn.Fmly.SubFmlyCd.text(),
+        direction
+    ].findAll { it }.join('/')
+}
+
+def formatCamtDate(String dateText, Closure logWarn) {
+    def trimmedDate = firstNonBlank([dateText])
+    if (!trimmedDate) {
+        return ''
+    }
+
+    try {
+        def parsed = new SimpleDateFormat('yyyy-MM-dd', Locale.ENGLISH).parse(trimmedDate)
+        return new SimpleDateFormat('dd-MMM-yy', Locale.ENGLISH).format(parsed)
+    } catch (Exception e) {
+        logWarn("Could not parse CAMT date '${dateText}': ${e.message}")
+        return trimmedDate
+    }
+}
+
+def formatSignedAmount(String amountText, String direction, Closure logWarn) {
+    def normalizedAmount = firstNonBlank([amountText]).replace(',', '.')
+    if (!normalizedAmount) {
+        return ''
+    }
+
+    try {
+        def amount = new BigDecimal(normalizedAmount)
+        if (direction == 'DBIT' && amount.signum() > 0) {
+            amount = amount.negate()
+        }
+        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString()
+    } catch (Exception e) {
+        logWarn("Could not parse CAMT amount '${amountText}': ${e.message}")
+        return normalizedAmount
+    }
+}
+
+def toOreAmount(String amountText, Closure logWarn) {
+    def normalizedAmount = firstNonBlank([amountText]).replace(',', '.')
+    if (!normalizedAmount) {
+        return ''
+    }
+
+    try {
+        return new BigDecimal(normalizedAmount)
+            .multiply(new BigDecimal('100'))
+            .setScale(0, RoundingMode.HALF_UP)
+            .toPlainString()
+    } catch (Exception e) {
+        logWarn("Could not convert CAMT amount '${amountText}' to ore: ${e.message}")
+        return normalizedAmount
+    }
+}
+
+def normalizeAccountNumber(String accountNumber) {
+    def normalized = firstNonBlank([accountNumber]).replace(' ', '')
+    if (normalized.startsWith('NO') && normalized.length() > 4) {
+        return normalized.substring(4)
+    }
+    return normalized
+}
+
+def collapseWhitespace(String value) {
+    return value ? value.replaceAll(/\s+/, ' ').trim() : ''
+}
+
+def firstNonBlank(List values) {
+    def firstValue = values.find { value ->
+        value != null && value.toString().trim()
+    }
+    return firstValue == null ? '' : firstValue.toString().trim()
+}
+
+def toCsvLine(List values) {
+    return values.collect { value -> escapeCsvValue(value) }.join(',')
+}
+
+def escapeCsvValue(value) {
+    def normalizedValue = value == null ? '' : value.toString()
+    if (normalizedValue.contains('"')) {
+        normalizedValue = normalizedValue.replace('"', '""')
+    }
+    if (normalizedValue.contains(',') || normalizedValue.contains('\n') || normalizedValue.contains('\r') || normalizedValue.contains('"')) {
+        return '"' + normalizedValue + '"'
+    }
+    return normalizedValue
+}
+
 // Shared date format instances (defined once to avoid repeated instantiation)
 def FMT_ISO_DATE     = new SimpleDateFormat("yyyy-MM-dd")              // Innlesing: Arena/tiltak-filer (regel 3, 4, 5, 6)
 def FMT_DD_MM_DATE   = new SimpleDateFormat("dd-MM-yyyy")              // Innlesing: norsk datoformat i avstemmingsfiler (regel 7, 8, 9, 12)
@@ -189,8 +386,72 @@ def FMT_NO_SHORT     = new SimpleDateFormat("dd-MMM-yy", Locale.forLanguageTag("
 def FMT_OUT_DATE     = new SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH) // Utdata: standard EPM/ARCS-format med 4-sifret år (brukes i alle regler)
 def FMT_OUT_SHORT    = new SimpleDateFormat("dd-MMM-yy",   Locale.ENGLISH) // Utdata: EPM/ARCS-format med 2-sifret år – kun BDATE i BANK_LOAD (regel 1)
 
-// 1. BANK_LOAD
-if (rule == "BANK_LOAD") {
+Map<String, Closure> ruleHandlers = [:]
+
+// 1. CAMT053_LOAD
+ruleHandlers["CAMT053_LOAD"] = {
+    long fullRunTimeStart = System.nanoTime()
+    def locationPath = "${baseRoot}/inbox/bank/camt053/"
+    def destLocation = "${baseRoot}/inbox/bank/camt053/arkiv/"
+    String filePath = ""
+    String fileName = ""
+
+    def header = 'KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5'
+
+    def folder = new File(locationPath)
+    if (!folder.exists()) {
+        def msg = "CAMT053_LOAD: Directory not found: ${locationPath}"
+        logError(msg)
+        outputFile.write(header, "UTF-8")
+        throw new RuntimeException(msg)
+    }
+
+    List<File> matchingFiles = (folder.listFiles() ?: ([] as File[]))
+        .findAll { File file -> isCamt053File(file) }
+        .sort { [it.lastModified(), it.getName()] }
+
+    if (matchingFiles.isEmpty()) {
+        logWarn("No matching CAMT.053 files found in: ${locationPath} — writing empty output.")
+        outputFile.write(header, "UTF-8")
+        return
+    }
+
+    StringBuilder outputBuilder = new StringBuilder()
+    boolean firstFile = true
+
+    matchingFiles.each { File file ->
+        filePath = file.getAbsolutePath()
+        fileName = file.getName()
+        logInfo("Selected file name: ${fileName}")
+        logInfo("Selected file: ${filePath}")
+        logInfo("Processing CAMT053 file: ${fileName}")
+
+        String fileOutput = buildCamt053Output(file, logInfo, logWarn)
+
+        if (firstFile) {
+            outputBuilder.append(fileOutput)
+            firstFile = false
+        } else {
+            // Hopp over header-linje for påfølgende filer
+            def lines = fileOutput.split('\n') as List
+            outputBuilder.append('\n').append(lines.drop(1).join('\n'))
+        }
+
+        def dst = new File(destLocation + fileName)
+        copyFileWithEncoding(file, dst, "UTF-8")
+        logInfo("File archived to: ${dst.getAbsolutePath()}")
+    }
+
+    outputFile.write(outputBuilder.toString(), "UTF-8")
+    logInfo("Output written to: ${outFileName}")
+
+    long fullRunTimeEnd = System.nanoTime()
+    long fullDuration = fullRunTimeEnd - fullRunTimeStart
+    logInfo("CAMT053 processing completed in: " + (fullDuration / 1_000_000) + " ms")
+}
+
+// 2. BANK_LOAD
+ruleHandlers["BANK_LOAD"] = {
     logInfo("Starting rule: BANK_LOAD")
     long fullRunTimeStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/bank/"
@@ -318,7 +579,7 @@ if (rule == "BANK_LOAD") {
     String outputData = outputDataBuilder.toString().trim()
     myFile.delete()
     myFile1.delete()
-    outputFile.write(outputData)
+    writeOutput(outputData)
 
     long fullRunTimeEnd = System.nanoTime()
     long fullDuration = fullRunTimeEnd - fullRunTimeStart
@@ -327,8 +588,8 @@ if (rule == "BANK_LOAD") {
     logInfo("BANK_LOAD complete: ${rowsWritten} rows written. Full runtime: ${fullDuration / 1_000_000} ms")
 }
 
-// 2. OEBS_BANK_LOAD
-else if (rule == "OEBS_BANK_LOAD") {
+// 3. OEBS_BANK_LOAD
+ruleHandlers["OEBS_BANK_LOAD"] = {
     logInfo("Starting rule: OEBS_BANK_LOAD")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/OracleGL"
@@ -362,12 +623,12 @@ else if (rule == "OEBS_BANK_LOAD") {
             rowsWritten++
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("OEBS_BANK_LOAD complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 3. Tiltak_Daglig_Bestilling
-else if (rule == "Tiltak_Daglig_Bestilling") {
+// 4. Tiltak_Daglig_Bestilling
+ruleHandlers["Tiltak_Daglig_Bestilling"] = {
     logInfo("Starting rule: Tiltak_Daglig_Bestilling")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/daglig/"
@@ -392,12 +653,12 @@ else if (rule == "Tiltak_Daglig_Bestilling") {
             }
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_Daglig_Bestilling complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 4. Tiltak_Daglig_Faktura
-else if (rule == "Tiltak_Daglig_Faktura") {
+// 5. Tiltak_Daglig_Faktura
+ruleHandlers["Tiltak_Daglig_Faktura"] = {
     logInfo("Starting rule: Tiltak_Daglig_Faktura")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/daglig/"
@@ -434,12 +695,12 @@ else if (rule == "Tiltak_Daglig_Faktura") {
             }
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_Daglig_Faktura complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 5. Tiltak_Tilsagn_Arena_LT – only rows with type LT-tilsagn and status Godkjent (filter added)
-else if (rule == "Tiltak_Tilsagn_Arena_LT") {
+// 6. Tiltak_Tilsagn_Arena_LT – only rows with type LT-tilsagn and status Godkjent (filter added)
+ruleHandlers["Tiltak_Tilsagn_Arena_LT"] = {
     logInfo("Starting rule: Tiltak_Tilsagn_Arena_LT")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/daglig/LT/tilsagn"
@@ -466,12 +727,12 @@ else if (rule == "Tiltak_Tilsagn_Arena_LT") {
             }
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_Tilsagn_Arena_LT complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 6. Tiltak_Tilsagn_Arena_LT-refusjon
-else if (rule == "Tiltak_Tilsagn_Arena_LT-refusjon") {
+// 7. Tiltak_Tilsagn_Arena_LT-refusjon
+ruleHandlers["Tiltak_Tilsagn_Arena_LT-refusjon"] = {
     logInfo("Starting rule: Tiltak_Tilsagn_Arena_LT-refusjon")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/daglig/LT/refusjon"
@@ -496,12 +757,12 @@ else if (rule == "Tiltak_Tilsagn_Arena_LT-refusjon") {
             }
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_Tilsagn_Arena_LT-refusjon complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 7. Tiltak_Tilsagn_Arena_Annul
-else if (rule == "Tiltak_Tilsagn_Arena_Annul") {
+// 8. Tiltak_Tilsagn_Arena_Annul
+ruleHandlers["Tiltak_Tilsagn_Arena_Annul"] = {
     logInfo("Starting rule: Tiltak_Tilsagn_Arena_Annul")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/daglig/arena/tilsagn/annullert"
@@ -532,12 +793,12 @@ else if (rule == "Tiltak_Tilsagn_Arena_Annul") {
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_Tilsagn_Arena_Annul complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 8. Tiltak_RefKrav_Arena
-else if (rule == "Tiltak_RefKrav_Arena") {
+// 9. Tiltak_RefKrav_Arena
+ruleHandlers["Tiltak_RefKrav_Arena"] = {
     logInfo("Starting rule: Tiltak_RefKrav_Arena")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/daglig/arena/refusjon/"
@@ -562,12 +823,12 @@ else if (rule == "Tiltak_RefKrav_Arena") {
             }
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_RefKrav_Arena complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-// 9. Tiltak_RefKrav_Arena_Tilsagn_Godkjent
-else if (rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent") {
+// 10. Tiltak_RefKrav_Arena_Tilsagn_Godkjent
+ruleHandlers["Tiltak_RefKrav_Arena_Tilsagn_Godkjent"] = {
     logInfo("Starting rule: Tiltak_RefKrav_Arena_Tilsagn_Godkjent")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/daglig/arena/tilsagn/"
@@ -593,12 +854,12 @@ else if (rule == "Tiltak_RefKrav_Arena_Tilsagn_Godkjent") {
             }
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_RefKrav_Arena_Tilsagn_Godkjent complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
 // 11. Tiltak_Manedlig_OEBS
-else if (rule == "Tiltak_Manedlig_OEBS") {
+ruleHandlers["Tiltak_Manedlig_OEBS"] = {
     logInfo("Starting rule: Tiltak_Manedlig_OEBS")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/maanedlig/"
@@ -615,7 +876,7 @@ else if (rule == "Tiltak_Manedlig_OEBS") {
             line = line.replace(",", ".")
             def belop1 = getSemicolonField(line, 3)?.trim()
 
-            if (!belop1 || belop1 == 0 || belop1 == "0") {
+            if (isZeroOrBlankAmount(belop1)) {
                 rowsSkipped++
                 continue
             }
@@ -634,12 +895,12 @@ else if (rule == "Tiltak_Manedlig_OEBS") {
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_Manedlig_OEBS complete: ${rowsWritten} rows written, ${rowsSkipped} rows skipped (zero/empty amount). Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
 // 12. Tiltak_Manedlig
-else if (rule == "Tiltak_Manedlig") {
+ruleHandlers["Tiltak_Manedlig"] = {
     logInfo("Starting rule: Tiltak_Manedlig")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/tiltak/maanedlig"
@@ -658,7 +919,7 @@ else if (rule == "Tiltak_Manedlig") {
             line = line.replace(",", ".")
             def belop1 = getSemicolonField(line, 4)?.trim()
 
-            if (!belop1 || belop1 == 0 || belop1 == "0") {
+            if (isZeroOrBlankAmount(belop1)) {
                 rowsSkipped++
                 continue
             }
@@ -675,12 +936,12 @@ else if (rule == "Tiltak_Manedlig") {
             rowsWritten++
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Tiltak_Manedlig complete: ${rowsWritten} rows written, ${rowsSkipped} rows skipped (zero/empty amount). Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
 // 13. Grensesnitt
-else if (rule == "Grensesnitt") {
+ruleHandlers["Grensesnitt"] = {
     logInfo("Starting rule: Grensesnitt")
     long ruleStart = System.nanoTime()
     def locationPath = "${baseRoot}/inbox/grensesnitt"
@@ -730,12 +991,12 @@ else if (rule == "Grensesnitt") {
             }
         }
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Grensesnitt complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
 // 14. Grensesnitt_fag
-else if (rule == "Grensesnitt_fag") {
+ruleHandlers["Grensesnitt_fag"] = {
     logInfo("Starting rule: Grensesnitt_fag")
     long ruleStart = System.nanoTime()
     def locationPath  = "${baseRoot}/inbox/grensesnitt"
@@ -759,7 +1020,10 @@ else if (rule == "Grensesnitt_fag") {
         for (line in fileContents) {
             line = line.replace(",", ".")
             // Dato ligger i felt 3 (mellom 3. og 4. semikolon) i fagsystem-filen – ikke felt 2 som i øvrige regler
-            def datestr = getSemicolonField(line, 3)
+            def datestr = getSemicolonField(line, 3)?.trim()
+            if (!datestr) {
+                failMalformed("Grensesnitt_fag: missing or blank date field in line: '${line}' in file: ${file.getName()}")
+            }
             def newdate = reformatDate(datestr, FMT_COMPACT_DATE, FMT_OUT_DATE)
             if (newdate == null) continue
             line = line.replace(datestr, newdate)
@@ -770,264 +1034,12 @@ else if (rule == "Grensesnitt_fag") {
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encodingFag)
     }
-    outputFile.write(output.toString())
+    writeOutput(output.toString())
     logInfo("Grensesnitt_fag complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
-def isLegacyBankFile(File file) {
-    return file?.isFile() && file.getName().toLowerCase(Locale.ROOT).contains("tdnb")
+Closure selectedRuleHandler = ruleHandlers[rule]
+if (!selectedRuleHandler) {
+    failMalformed("Unknown rule '${rule}'. Supported rules: ${ruleHandlers.keySet().sort().join(', ')}")
 }
-
-def isCamt053File(File file) {
-    if (!file?.isFile()) {
-        return false
-    }
-
-    def lowerName = file.getName().toLowerCase(Locale.ROOT)
-    if (!lowerName.endsWith(".xml")) {
-        return false
-    }
-
-    if (lowerName.contains("c053") || lowerName.contains("camt")) {
-        return true
-    }
-
-    try {
-        def preview = file.withReader("UTF-8") { reader ->
-            def lines = []
-            for (int i = 0; i < 10; i++) {
-                def line = reader.readLine()
-                if (line == null) {
-                    break
-                }
-                lines << line
-            }
-            lines.join("\n")
-        }
-        return preview.toLowerCase(Locale.ROOT).contains("camt.053")
-    } catch (Exception ignored) {
-        return false
-    }
-}
-
-def buildCamt053Output(File file, Closure logInfo, Closure logWarn) {
-    def xml = new XmlSlurper(false, false).parse(file)
-    def header = 'KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5'
-    def rows = []
-
-    def kundeNummer = firstNonBlank([
-        xml.BkToCstmrStmt.GrpHdr.MsgRcpt.Id.OrgId.Othr.find { it.SchmeNm.Cd.text() == 'CUST' }?.Id?.text(),
-        xml.BkToCstmrStmt.Stmt[0]?.Acct?.Ownr?.Id?.OrgId?.Othr[0]?.Id?.text()
-    ])
-
-    int statementCount = 0
-    xml.BkToCstmrStmt.Stmt.each { stmt ->
-        statementCount++
-
-        def accountNumber = normalizeAccountNumber(firstNonBlank([
-            stmt.Acct.Id.IBAN.text(),
-            stmt.Acct.Id.Othr.Id.text()
-        ]))
-        def statementCurrency = firstNonBlank([stmt.Acct.Ccy.text(), 'NOK'])
-
-        stmt.Ntry.each { ntry ->
-            def direction = firstNonBlank([ntry.CdtDbtInd.text(), 'CRDT'])
-            def bookingDate = formatCamtDate(ntry.BookgDt.Dt.text(), logWarn)
-            def txDetails = ntry.NtryDtls.TxDtls
-
-            if (!txDetails || txDetails.size() == 0) {
-                def signedAmount = formatSignedAmount(ntry.Amt.text(), direction, logWarn)
-                rows << toCsvLine([
-                    kundeNummer,
-                    accountNumber,
-                    firstNonBlank([ntry.Amt.@Ccy.text(), statementCurrency]),
-                    bookingDate,
-                    toOreAmount(signedAmount, logWarn),
-                    signedAmount,
-                    firstNonBlank([ntry.NtryRef.text(), ntry.AcctSvcrRef.text()]),
-                    '',
-                    '',
-                    buildBankContent5(ntry, direction),
-                    ''
-                ])
-                return
-            }
-
-            txDetails.each { txDtls ->
-                def signedAmount = formatSignedAmount(
-                    firstNonBlank([txDtls.AmtDtls.TxAmt.Amt.text(), ntry.Amt.text()]),
-                    direction,
-                    logWarn
-                )
-
-                def remittanceLines = txDtls.RmtInf.Ustrd.collect { it.text() }.findAll { it }
-                def remittanceDeduped = remittanceLines.inject([]) { acc, v ->
-                    (acc.isEmpty() || acc.last() != v) ? acc + v : acc
-                }
-                def remittanceText = collapseWhitespace(remittanceDeduped.join(''))
-                if (!remittanceText) {
-                    remittanceText = collapseWhitespace(txDtls.AddtlTxInf.text())
-                }
-
-                def content1 = (remittanceText == 'OVERF. NORGES BANK')
-                    ? extractRelatedAccount(txDtls.RltdPties.DbtrAcct)
-                    : firstNonBlank([
-                        txDtls.Refs.ClrSysRef.text(),
-                        txDtls.Refs.EndToEndId.text(),
-                        txDtls.Refs.TxId.text(),
-                        txDtls.Refs.AcctSvcrRef.text(),
-                        ntry.AcctSvcrRef.text(),
-                        ntry.NtryRef.text()
-                    ])
-
-                rows << toCsvLine([
-                    kundeNummer,
-                    accountNumber,
-                    firstNonBlank([txDtls.AmtDtls.TxAmt.Amt.@Ccy.text(), ntry.Amt.@Ccy.text(), statementCurrency]),
-                    bookingDate,
-                    toOreAmount(signedAmount, logWarn),
-                    signedAmount,
-                    content1,
-                    remittanceText,
-                    findCounterpartyName(txDtls, direction),
-                    buildBankContent5(ntry, direction),
-                    ''
-                ])
-            }
-        }
-    }
-
-    logInfo("Processed CAMT.053 file '${file.getName()}' with ${statementCount} statements and ${rows.size()} output rows.")
-    return ([header] + rows).join('\n')
-}
-
-def findCounterpartyName(txDtls, String direction) {
-    if (direction == 'DBIT') {
-        return firstNonBlank([
-            txDtls.RltdPties.Cdtr.Nm.text(),
-            txDtls.RltdPties.UltmtCdtr.Nm.text(),
-            txDtls.RltdPties.Dbtr.Nm.text()
-        ])
-    }
-
-    return firstNonBlank([
-        txDtls.RltdPties.Dbtr.Nm.text(),
-        txDtls.RltdPties.UltmtDbtr.Nm.text(),
-        txDtls.RltdPties.Cdtr.Nm.text()
-    ])
-}
-
-def findCounterpartyAccount(txDtls, String direction) {
-    if (direction == 'DBIT') {
-        return firstNonBlank([
-            extractRelatedAccount(txDtls.RltdPties.CdtrAcct),
-            extractRelatedAccount(txDtls.RltdPties.DbtrAcct)
-        ])
-    }
-
-    return firstNonBlank([
-        extractRelatedAccount(txDtls.RltdPties.DbtrAcct),
-        extractRelatedAccount(txDtls.RltdPties.CdtrAcct)
-    ])
-}
-
-def extractRelatedAccount(accountNode) {
-    return normalizeAccountNumber(firstNonBlank([
-        accountNode?.Id?.IBAN?.text(),
-        accountNode?.Id?.Othr?.Id?.text()
-    ]))
-}
-
-def buildBankContent5(ntry, String direction) {
-    return [
-        ntry.BkTxCd.Prtry.Cd.text(),
-        ntry.BkTxCd.Domn.Cd.text(),
-        ntry.BkTxCd.Domn.Fmly.Cd.text(),
-        ntry.BkTxCd.Domn.Fmly.SubFmlyCd.text(),
-        direction
-    ].findAll { it }.join('/')
-}
-
-def formatCamtDate(String dateText, Closure logWarn) {
-    def trimmedDate = firstNonBlank([dateText])
-    if (!trimmedDate) {
-        return ''
-    }
-
-    try {
-        def parsed = new SimpleDateFormat('yyyy-MM-dd', Locale.ENGLISH).parse(trimmedDate)
-        return new SimpleDateFormat('dd-MMM-yy', Locale.ENGLISH).format(parsed)
-    } catch (Exception e) {
-        logWarn("Could not parse CAMT date '${dateText}': ${e.message}")
-        return trimmedDate
-    }
-}
-
-def formatSignedAmount(String amountText, String direction, Closure logWarn) {
-    def normalizedAmount = firstNonBlank([amountText]).replace(',', '.')
-    if (!normalizedAmount) {
-        return ''
-    }
-
-    try {
-        def amount = new BigDecimal(normalizedAmount)
-        if (direction == 'DBIT' && amount.signum() > 0) {
-            amount = amount.negate()
-        }
-        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString()
-    } catch (Exception e) {
-        logWarn("Could not parse CAMT amount '${amountText}': ${e.message}")
-        return normalizedAmount
-    }
-}
-
-def toOreAmount(String amountText, Closure logWarn) {
-    def normalizedAmount = firstNonBlank([amountText]).replace(',', '.')
-    if (!normalizedAmount) {
-        return ''
-    }
-
-    try {
-        return new BigDecimal(normalizedAmount)
-            .multiply(new BigDecimal('100'))
-            .setScale(0, RoundingMode.HALF_UP)
-            .toPlainString()
-    } catch (Exception e) {
-        logWarn("Could not convert CAMT amount '${amountText}' to ore: ${e.message}")
-        return normalizedAmount
-    }
-}
-
-def normalizeAccountNumber(String accountNumber) {
-    def normalized = firstNonBlank([accountNumber]).replace(' ', '')
-    if (normalized.startsWith('NO') && normalized.length() > 4) {
-        return normalized.substring(4)
-    }
-    return normalized
-}
-
-def collapseWhitespace(String value) {
-    return value ? value.replaceAll(/\s+/, ' ').trim() : ''
-}
-
-def firstNonBlank(List values) {
-    def firstValue = values.find { value ->
-        value != null && value.toString().trim()
-    }
-    return firstValue == null ? '' : firstValue.toString().trim()
-}
-
-def toCsvLine(List values) {
-    return values.collect { value -> escapeCsvValue(value) }.join(',')
-}
-
-def escapeCsvValue(value) {
-    def normalizedValue = value == null ? '' : value.toString()
-    if (normalizedValue.contains('"')) {
-        normalizedValue = normalizedValue.replace('"', '""')
-    }
-    if (normalizedValue.contains(',') || normalizedValue.contains('\n') || normalizedValue.contains('\r') || normalizedValue.contains('"')) {
-        return '"' + normalizedValue + '"'
-    }
-    return normalizedValue
-}
+selectedRuleHandler.call()
