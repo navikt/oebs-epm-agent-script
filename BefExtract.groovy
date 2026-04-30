@@ -31,6 +31,35 @@ def writeOutput = { String data, String enc = encoding ->
     outputFile.write(data ?: "", enc)
 }
 
+def withRuleDiagnostics(String ruleName, Closure handler) {
+    long ruleStart = System.nanoTime()
+    logDiagInfo("rule.start", [rule: ruleName])
+    handler.call()
+    long durationMs = Math.floorDiv(System.nanoTime() - ruleStart, 1_000_000L)
+    logDiagInfo("rule.completed", [rule: ruleName, durationMs: durationMs])
+}
+
+def formatAvailableFiles(List<String> fileNames) {
+    return fileNames.isEmpty() ? "(ingen filer)" : fileNames.join(", ")
+}
+
+def formatLogDetails(Map details) {
+    if (!details || details.isEmpty()) {
+        return ""
+    }
+    return details.collect { k, v -> "${k}=${v}" }.join(" | ")
+}
+
+def logDiagInfo(String event, Map details = [:]) {
+    def suffix = formatLogDetails(details)
+    logInfo("event=${event}" + (suffix ? " | ${suffix}" : ""))
+}
+
+def logDiagWarn(String event, Map details = [:]) {
+    def suffix = formatLogDetails(details)
+    logWarn("event=${event}" + (suffix ? " | ${suffix}" : ""))
+}
+
 String runDir = System.getProperty("user.dir") ?: ""
 String baseRoot = (runDir.contains("/data/ar/prod/") || runDir.endsWith("/data/ar/prod")) ? "/data/ar/prod" :
         ((runDir.contains("/data/ar/dev/") || runDir.endsWith("/data/ar/dev")) ? "/data/ar/dev" : "")
@@ -55,12 +84,36 @@ def findFiles(String locationPath, Closure nameMatcher) {
         logError("Directory not found: ${locationPath}")
         return ([] as List<File>)
     }
+
+    int discoveredFiles = 0
+    List<String> availableFiles = []
     List<File> result = []
     dir.eachFile { File file ->
-        if (file.isFile() && nameMatcher(file.getName())) {
+        if (!file.isFile()) {
+            return
+        }
+
+        discoveredFiles++
+        availableFiles << file.getName()
+        if (nameMatcher(file.getName())) {
             logInfo("Selected file: ${file.getAbsolutePath()}")
             result << file
         }
+    }
+
+    if (result.isEmpty()) {
+        logDiagWarn("findFiles.summary", [
+            path          : locationPath,
+            discoveredFiles: discoveredFiles,
+            matchedFiles   : 0,
+            availableFiles : formatAvailableFiles(availableFiles.sort())
+        ])
+    } else {
+        logDiagInfo("findFiles.summary", [
+            path          : locationPath,
+            discoveredFiles: discoveredFiles,
+            matchedFiles   : result.size()
+        ])
     }
     return result.sort { a, b -> a.getName().toLowerCase(Locale.ROOT) <=> b.getName().toLowerCase(Locale.ROOT) }
 }
@@ -94,6 +147,18 @@ def readAllLines(File file, String enc) {
         lines = reader.readLines()
     }
     return lines
+}
+
+def readNonEmptyLinesWithStats(File file, String enc, String ruleName) {
+    List<String> rawLines = readAllLines(file, enc)
+    List<String> nonEmptyLines = filterNonEmptyLines(rawLines)
+    logDiagInfo("file.lines", [
+        rule         : ruleName,
+        fileName     : file.getName(),
+        rawLines     : rawLines.size(),
+        nonEmptyLines: nonEmptyLines.size()
+    ])
+    return nonEmptyLines
 }
 
 // Read only a small preview to identify XML type without loading the full file.
@@ -406,44 +471,58 @@ ruleHandlers["CAMT053_LOAD"] = {
         throw new RuntimeException(msg)
     }
 
-    List<File> matchingFiles = (folder.listFiles() ?: ([] as File[]))
+    List<File> availableFiles = (folder.listFiles() ?: ([] as File[])).findAll { it.isFile() } as List<File>
+    int discoveredFiles = availableFiles.size()
+    logDiagInfo("camt053.discovery", [path: locationPath, discoveredFiles: discoveredFiles])
+
+    List<File> matchingFiles = availableFiles
         .findAll { File file -> isCamt053File(file) }
         .sort { [it.lastModified(), it.getName()] }
 
+    logDiagInfo("camt053.match", [path: locationPath, matchedFiles: matchingFiles.size()])
+
     if (matchingFiles.isEmpty()) {
-        logWarn("No matching CAMT.053 files found in: ${locationPath} — writing empty output.")
+        List<String> availableNames = availableFiles.collect { it.getName() }
+        logDiagWarn("camt053.no_match", [
+            path          : locationPath,
+            discoveredFiles: discoveredFiles,
+            availableFiles : formatAvailableFiles(availableNames.sort())
+        ])
         outputFile.write(header, "UTF-8")
         return
     }
 
     StringBuilder outputBuilder = new StringBuilder()
     boolean firstFile = true
+    int totalRowsBuilt = 0
 
     matchingFiles.each { File file ->
         filePath = file.getAbsolutePath()
         fileName = file.getName()
-        logInfo("Selected file name: ${fileName}")
-        logInfo("Selected file: ${filePath}")
-        logInfo("Processing CAMT053 file: ${fileName}")
+        int rawLinesInFile = readAllLines(file, "UTF-8").size()
+        logDiagInfo("camt053.file.selected", [fileName: fileName, filePath: filePath, rawLines: rawLinesInFile])
 
         String fileOutput = buildCamt053Output(file, logInfo, logWarn)
+        List<String> fileLines = fileOutput.readLines()
+        int rowsInFile = Math.max((fileLines.size() - 1), 0)
+        totalRowsBuilt += rowsInFile
+        logDiagInfo("camt053.file.output", [fileName: fileName, outputRows: rowsInFile])
 
         if (firstFile) {
             outputBuilder.append(fileOutput)
             firstFile = false
         } else {
             // Hopp over header-linje for påfølgende filer
-            def lines = fileOutput.split('\n') as List
-            outputBuilder.append('\n').append(lines.drop(1).join('\n'))
+            outputBuilder.append('\n').append(fileLines.drop(1).join('\n'))
         }
 
         def dst = new File(destLocation + fileName)
         copyFileWithEncoding(file, dst, "UTF-8")
-        logInfo("File archived to: ${dst.getAbsolutePath()}")
+        logDiagInfo("camt053.file.archived", [fileName: fileName, archivePath: dst.getAbsolutePath()])
     }
 
     outputFile.write(outputBuilder.toString(), "UTF-8")
-    logInfo("Output written to: ${outFileName}")
+    logDiagInfo("camt053.output.written", [outputFile: outFileName, totalOutputRows: totalRowsBuilt])
 
     long fullRunTimeEnd = System.nanoTime()
     long fullDuration = fullRunTimeEnd - fullRunTimeStart
@@ -464,6 +543,8 @@ ruleHandlers["BANK_LOAD"] = {
 
     File file = matchingFiles[0]
     def fileName = file.getName()
+    int bankRawLines = readAllLines(file, encoding).size()
+    logDiagInfo("file.lines", [rule: "BANK_LOAD", fileName: fileName, rawLines: bankRawLines])
     StringBuilder edit = new StringBuilder()
 
     // Loop through each line – close reader automatically via withReader
@@ -600,7 +681,7 @@ ruleHandlers["OEBS_BANK_LOAD"] = {
     int rowsWritten = 0
 
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "OEBS_BANK_LOAD")
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
@@ -638,7 +719,7 @@ ruleHandlers["Tiltak_Daglig_Bestilling"] = {
     StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse")
     int rowsWritten = 0
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_Daglig_Bestilling")
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
@@ -667,7 +748,7 @@ ruleHandlers["Tiltak_Daglig_Faktura"] = {
     StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer")
     int rowsWritten = 0
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_Daglig_Faktura")
 
         def combinedLines = []
         def currentLine = ""
@@ -710,7 +791,7 @@ ruleHandlers["Tiltak_Tilsagn_Arena_LT"] = {
     StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopenummer")
     int rowsWritten = 0
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_Tilsagn_Arena_LT")
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
@@ -742,7 +823,7 @@ ruleHandlers["Tiltak_Tilsagn_Arena_LT-refusjon"] = {
     int rowsWritten = 0
 
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_Tilsagn_Arena_LT-refusjon")
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
@@ -777,7 +858,7 @@ ruleHandlers["Tiltak_Tilsagn_Arena_Annul"] = {
     StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer")
     int rowsWritten = 0
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_Tilsagn_Arena_Annul")
 
         for (line in fileContents) {
             line = line.replace(",", ".")
@@ -808,7 +889,7 @@ ruleHandlers["Tiltak_RefKrav_Arena"] = {
     StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer")
     int rowsWritten = 0
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_RefKrav_Arena")
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
@@ -838,7 +919,7 @@ ruleHandlers["Tiltak_RefKrav_Arena_Tilsagn_Godkjent"] = {
     StringBuilder output = new StringBuilder("Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer")
     int rowsWritten = 0
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_RefKrav_Arena_Tilsagn_Godkjent")
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
@@ -870,7 +951,7 @@ ruleHandlers["Tiltak_Manedlig_OEBS"] = {
     int rowsSkipped = 0
 
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_Manedlig_OEBS")
 
         for (line in fileContents) {
             line = line.replace(",", ".")
@@ -911,7 +992,7 @@ ruleHandlers["Tiltak_Manedlig"] = {
     int rowsSkipped = 0
 
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Tiltak_Manedlig")
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
@@ -951,7 +1032,7 @@ ruleHandlers["Grensesnitt"] = {
     int rowsWritten = 0
 
     matchingFiles.each { file ->
-        def fileContents = filterNonEmptyLines(readAllLines(file, encoding))
+        def fileContents = readNonEmptyLinesWithStats(file, encoding, "Grensesnitt")
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encoding)
 
@@ -1013,9 +1094,12 @@ ruleHandlers["Grensesnitt_fag"] = {
     int rowsWritten = 0
 
     matchingFiles.each { file ->
-        def fileContents = readAllLines(file, encodingFag)
+        def rawLines = readAllLines(file, encodingFag)
+        logDiagInfo("file.lines", [rule: "Grensesnitt_fag", fileName: file.getName(), rawLines: rawLines.size()])
+        def fileContents = rawLines
         logInfo("Grensesnitt_fag: skipping header row in file ${file.getName()}")
         fileContents = filterNonEmptyLines(fileContents.drop(1))
+        logDiagInfo("file.lines.after_header", [rule: "Grensesnitt_fag", fileName: file.getName(), nonEmptyLines: fileContents.size()])
 
         for (line in fileContents) {
             line = line.replace(",", ".")
@@ -1042,4 +1126,4 @@ Closure selectedRuleHandler = ruleHandlers[rule]
 if (!selectedRuleHandler) {
     failMalformed("Unknown rule '${rule}'. Supported rules: ${ruleHandlers.keySet().sort().join(', ')}")
 }
-selectedRuleHandler.call()
+withRuleDiagnostics(rule?.toString(), selectedRuleHandler)

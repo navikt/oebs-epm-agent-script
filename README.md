@@ -1,45 +1,166 @@
-# oebs-epm-agent-script
-Groovy script for bruk i EPM Integration Agent for konvertering av filer til lesbart format av Oracle EPM cloud Account Reconciliation
+# epm-agent-script
+Groovy-script for Oracle EPM Integration Agent.
 
-## Brukerveiledning
+Dette dokumentet gjelder `BefExtract.groovy` og beskriver hvordan innfiler leses, transformeres og klargjøres for innlasting i Oracle EPM Account Reconciliation.
 
-### Script lokasjon
-1. Logg inn på applikasjonsserver
-2. Logg inn på **EPM-server**
-3. naviger til `/data/ar/dev` eller `/data/ar/prod`
-4. Scriptet skal ligge i mappen `scripts`
+## Oversikt
+
+- Scriptet kjører som preprosessering (`BefExtract`) i agentflyten.
+- Kjøring styres av bindvariabelen `Rule`.
+- Hver regel leser filer fra `inbox`, skriver resultat til agentens outputfil og arkiverer kildefil i `arkiv`.
+- Base path bestemmes automatisk fra `user.dir`:
+  - `/data/ar/dev`
+  - `/data/ar/prod`
+
+## Lokasjon og drift
+
+### Scriptlokasjon
+1. Logg inn på EPM-server.
+2. Gå til miljørot (`/data/ar/dev` eller `/data/ar/prod`).
+3. Legg scriptet i `scripts`.
 
 ### Starte og stoppe EPM Integration Agent
-1. Starte agenten fra **EPM-server** `/data/ar/dev/bin` kjør kommando: `./epmagent.sh /data/ar/dev/config/agentparams.ini`
-2. Stoppe agenten fra **EPM-server** `/data/ar/dev/bin` kjør kommando: `./stopagent.sh <navn på agent>` for dev er navnet på agenten `EPMAGENT` for prod er navnet `EPMAGENT_PROD`
+Kjør fra riktig miljømappe.
+1. start agenten
+2. stoppe agenten
+```bash
+/data/ar/dev/bin/epmagent.sh /data/ar/dev/config/agentparams.ini
+/data/ar/dev/bin/stopagent.sh EPMAGENT
+```
+
+```bash
+/data/ar/prod/bin/epmagent.sh /data/ar/prod/config/agentparams.ini
+/data/ar/prod/bin/stopagent.sh EPMAGENT_PROD
+```
 
 ### Manuell flytting av filer
-1. Må flytte filer fra `\\adeo.no\appl\AdraMatch` til `F:`eller `W:`
-2. Kan bruke **_WinSCP_** fra **_Oracle Management Desktop_** og flytte filer med drag and drop
+1. Flytt filer fra `\\adeo.no\appl\AdraMatch` til `F:` eller `W:`.
+2. Bruk for eksempel WinSCP fra VDI ved behov.
 
-### Innlasting av filer
-Filer skal legges i mappen `inbox` denne mappen har forskjellige undermapper basert på hvilken type avstemming og filtype det gjelder.
+## Regelstyring i `BefExtract.groovy`
 
-* **Bankfiler** -> `tdnb#.txt`
-* **OracleGL filer** -> `OracleGL`
-* **Grensesnitt filer** -> `OB04_AR.dat`
-* **Grensesnitt fag filer** -> `familie-tilbake-p.csv`, `fptilbake-p.csv`,`k9-tilbake-p.csv`
-* **Tiltak daglig og LT-daglig bestilling filer** -> `Tiltak_Daglig`
-* **Tiltak daglig faktura og LT-daglig filer** -> `Tiltaksfaktura_Daglig`
-* **Tiltak avstemming daglig filer og LT-daglig** -> `tiltak_avstemming_dag.csv`, `LT_tiltak_avstemming_dag.csv`
-* **Tiltak månedlig filer** -> `Tiltak_Maanedlig`, `tiltak_avstemming_mnd`
-* **LT-Tiltak mnd** -> Ikke implementert
+- Scriptet bruker `ruleHandlers` (map av `Rule` -> closure).
+- Hvis `Rule` ikke finnes i `ruleHandlers`, feiler kjøringen med `Unknown rule`.
+- Nummereringen under matcher kommentarene i scriptet (1-14).
 
-Når filen ligger i riktig mappe kan du gå inn i avstemmingsløsningen og trigge jobben for å laste data inn i **_Oracle EPM Account Reconciliation_** under **Datautveksling** og kjøre riktig jobb.
+## Regler: input, matching, outputformat
 
-### Jobber som skal kjøres for avstemmingstyper
-Disse navnene er hentet fra produksjon og kan avvike noe fra test, hvis du er usikker kan du sjekke regelnavnene for integrasjonene i `ACCREC` og sammenligne med funksjonene i `groovy scriptet`.
+### 1. `CAMT053_LOAD`
+- **Inputmappe:** `inbox/bank/camt053/`
+- **Arkivmappe:** `inbox/bank/camt053/arkiv/`
+- **Filmatching:** XML-filer der innhold/namespace inneholder `camt.053`
+- **Output (CSV-header):**
+  - `KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5`
+- **Merknad:** Kan håndtere flere filer i samme kjøring og slå dem sammen i output.
 
-Jobbene finner du ved å gå inn i applikasjonen, trykke på `dataintegrasjon -> datautveksling`
+### 2. `BANK_LOAD`
+- **Inputmappe:** `inbox/bank/`
+- **Arkivmappe:** `inbox/bank/arkiv/`
+- **Filmatching:** Filnavn som inneholder `tdnb`
+- **Output (CSV-header):**
+  - `KUNDENUMMER,ACCOUNTNUMBER,VALKODE,BDATE,BELOP_ORE,BELOP,content1,content2,content3,content4,content5`
 
-* **Bank** -> **BANK_LOAD** og **OEBS_BANK_LOAD**
-* **Grensesnitt** -> **Grensesnitt_Fagsystem_Load** og **Grensesnitt_Sendt_Load**
-* **Tiltak daglig** -> **Tiltak_Tilsagn_ARENA1**, **Tiltak_RefKrav_Arena**, **Tiltak_Daglig_Bestilling1** og **Tiltak_Daglig_Faktura**
-* **Tiltak daglig annulertlinjer** -> **Daily Annullert - Tiltak_Tilsagn_Arena** denne er litt spesiell og er ikke 100% i bruk
-* **Tiltak månedlig** -> **Tiltak_Mnd_Arena1** og **Tiltak_Mnd_OeBS**
-* **LT-Tiltak** -> Ikke implementert
+### 3. `OEBS_BANK_LOAD`
+- **Inputmappe:** `inbox/OracleGL`
+- **Arkivmappe:** `inbox/OracleGL/arkiv/`
+- **Filmatching:** Filnavn som inneholder `GL2BETTY`
+- **Output (semikolon-header):**
+  - `Konto-Number;Reference1;Reference2;Debit;Credit;Date;Content1;Content2;Amount`
+
+### 4. `Tiltak_Daglig_Bestilling`
+- **Inputmappe:** `inbox/tiltak/daglig/`
+- **Arkivmappe:** `inbox/tiltak/daglig/arkiv/`
+- **Filmatching:** Filnavn som inneholder `Tiltak_Daglig`
+- **Output (semikolon-header):**
+  - `Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer;Referanse`
+
+### 5. `Tiltak_Daglig_Faktura`
+- **Inputmappe:** `inbox/tiltak/daglig/`
+- **Arkivmappe:** `inbox/tiltak/daglig/arkiv/`
+- **Filmatching:** Filnavn som inneholder `Tiltaksfaktura_Daglig`
+- **Output (semikolon-header):**
+  - `Type;Tilsagnsnummer;Dato;Belob;Valuta;Organisasjon;Bedrift;Lopenummer`
+
+### 6. `Tiltak_Tilsagn_Arena_LT`
+- **Inputmappe:** `inbox/tiltak/daglig/LT/tilsagn`
+- **Arkivmappe:** `inbox/tiltak/daglig/LT/tilsagn/arkiv/`
+- **Filmatching:** Filnavn som inneholder `LT_tiltak_avstemming_dag` eller `TILSAGN`
+- **Output (semikolon-header):**
+  - `Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopenummer`
+
+### 7. `Tiltak_Tilsagn_Arena_LT-refusjon`
+- **Inputmappe:** `inbox/tiltak/daglig/LT/refusjon`
+- **Arkivmappe:** `inbox/tiltak/daglig/LT/refusjon/arkiv/`
+- **Filmatching:** Filnavn som inneholder `LT_tiltak_avstemming_dag` eller `REFUSJON`
+- **Output (semikolon-header):**
+  - `Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Bedrift;Organisasjon;Lopennummer`
+
+### 8. `Tiltak_Tilsagn_Arena_Annul`
+- **Inputmappe:** `inbox/tiltak/daglig/arena/tilsagn/annullert`
+- **Arkivmappe:** `inbox/tiltak/daglig/arena/tilsagn/annullert/arkiv/`
+- **Filmatching:** Filnavn som inneholder `tiltak_avstemming_dag`
+- **Output (semikolon-header):**
+  - `Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer`
+
+### 9. `Tiltak_RefKrav_Arena`
+- **Inputmappe:** `inbox/tiltak/daglig/arena/refusjon/`
+- **Arkivmappe:** `inbox/tiltak/daglig/arena/refusjon/arkiv/`
+- **Filmatching:** Filnavn som inneholder `tiltak_avstemming_dag`
+- **Output (semikolon-header):**
+  - `Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer`
+
+### 10. `Tiltak_RefKrav_Arena_Tilsagn_Godkjent`
+- **Inputmappe:** `inbox/tiltak/daglig/arena/tilsagn/`
+- **Arkivmappe:** `inbox/tiltak/daglig/arena/tilsagn/arkiv/`
+- **Filmatching:** Filnavn som inneholder `tiltak_avstemming_dag`
+- **Output (semikolon-header):**
+  - `Type;Tilsagnsnummer;Dato;Status;Belob;Valuta;Organisasjon;Bedrift;Lopennummer`
+
+### 11. `Tiltak_Manedlig_OEBS`
+- **Inputmappe:** `inbox/tiltak/maanedlig/`
+- **Arkivmappe:** `inbox/tiltak/maanedlig/arkiv/`
+- **Filmatching:** Filnavn som inneholder `Tiltak_Maanedlig`
+- **Output (semikolon-header):**
+  - `Referanse;Dato;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer`
+
+### 12. `Tiltak_Manedlig`
+- **Inputmappe:** `inbox/tiltak/maanedlig`
+- **Arkivmappe:** `inbox/tiltak/maanedlig/arkiv/`
+- **Filmatching:** Filnavn som inneholder `tiltak_avstemming_mnd`
+- **Output (semikolon-header):**
+  - `Dato;Referanse;Year;Belob1;Belob2;Valuta;Organisasjon;Bedriftsnummer`
+
+### 13. `Grensesnitt`
+- **Inputmappe:** `inbox/grensesnitt`
+- **Arkivmappe:** `inbox/grensesnitt/arkiv/`
+- **Filmatching:** Filnavn som inneholder `OB04`
+- **Output (CSV-header):**
+  - `ref1,vedtaksID,belop_file,dato_overfort,person_nr,FOM,TOM,ytelseskonto,ref2,dato,kostnadssted,ansvarssted,ref3,rente1,rente2,ref4,fagsystem_ID`
+
+### 14. `Grensesnitt_fag`
+- **Inputmappe:** `inbox/grensesnitt`
+- **Arkivmappe:** `inbox/grensesnitt/arkiv/`
+- **Filmatching:** Filnavn som inneholder `tilbake-p` eller `navi`
+- **Inputencoding:** `UTF-8`
+- **Output (semikolon-header):**
+  - `avsender;vedtakId;fnr;vedtaksdato;fagsakYtelseType;tilbakekrevesBruttoUtenRenter;skatt;tilbakekrevesNettoUtenRenter;renter;erOmgjøringTilIngenTilbakekreving`
+
+## Arkivering
+
+- For hver behandlet fil kopieres innhold til regelens `arkiv`-mappe.
+- Deretter slettes originalfilen fra inputmappe.
+- Hvis sletting feiler, logges warning.
+
+## Kjøring i EPM
+
+1. Legg fil i riktig `inbox`-mappe for aktuell `Rule`.
+2. Start/bruk integrasjon i Oracle EPM Datautveksling.
+3. Kjør jobben som setter riktig `Rule`-verdi.
+4. Verifiser output og at originalfil er flyttet til `arkiv`.
+
+## Feilsøking
+
+- **Unknown rule**: `Rule`-verdien finnes ikke i `ruleHandlers`.
+- **Directory not found**: feil miljøbase (`/data/ar/dev` eller `/data/ar/prod`) eller manglende mappe.
+- **Date parsing-feil**: inputformat matcher ikke forventet format for regelen.
+- **Ingen filer plukket opp**: filnavn matcher ikke regelens mønster.
