@@ -1,4 +1,5 @@
 import groovy.xml.XmlSlurper
+import groovy.transform.Field
 
 import java.math.RoundingMode
 import java.text.SimpleDateFormat
@@ -15,9 +16,9 @@ File outputFile = new File(outFileName)
 String encoding = "ISO-8859-1"
 
 // Logging helpers
-def logInfo  = { msg -> println "[EXTRACT][INFO]  ${msg}" }
-def logWarn  = { msg -> println "[EXTRACT][WARN]  ${msg}" }
-def logError = { msg -> println "[EXTRACT][ERROR] ${msg}" }
+@Field def logInfo  = { msg -> println "[EXTRACT][INFO]  ${msg}" }
+@Field def logWarn  = { msg -> println "[EXTRACT][WARN]  ${msg}" }
+@Field def logError = { msg -> println "[EXTRACT][ERROR] ${msg}" }
 
 // Temporary verification toggle for runtime path detection.
 boolean DEBUG_PATH_VERIFICATION = false
