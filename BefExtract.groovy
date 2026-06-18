@@ -777,7 +777,7 @@ ruleHandlers["Tiltak_Daglig_Faktura"] = {
             }
         }
     }
-    writeOutput(output.toString())
+    writeOutput(output.toString(), "UTF-8")
     logInfo("Tiltak_Daglig_Faktura complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
@@ -809,7 +809,7 @@ ruleHandlers["Tiltak_Tilsagn_Arena_LT"] = {
             }
         }
     }
-    writeOutput(output.toString())
+    writeOutput(output.toString(), "UTF-8")
     logInfo("Tiltak_Tilsagn_Arena_LT complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
@@ -1073,7 +1073,7 @@ ruleHandlers["Grensesnitt"] = {
             }
         }
     }
-    writeOutput(output.toString())
+    writeOutput(output.toString(), "UTF-8")
     logInfo("Grensesnitt complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
@@ -1119,7 +1119,7 @@ ruleHandlers["Grensesnitt_fag"] = {
         def dst = new File(destLocation + file.getName())
         copyFileWithEncoding(file, dst, encodingFag)
     }
-    writeOutput(output.toString())
+    writeOutput(output.toString(), "UTF-8")
     logInfo("Grensesnitt_fag complete: ${rowsWritten} rows written. Runtime: ${(System.nanoTime() - ruleStart) / 1_000_000} ms")
 }
 
