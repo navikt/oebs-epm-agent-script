@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="850" viewBox="0 0 1000 850" role="img" aria-labelledby="title description">
+  <title id="title">CAMT.053: XML-struktur og kobling til CSV</title>
+  <desc id="description">Document inneholder BkToCstmrStmt med et felles GrpHdr og flere Stmt. Hver Stmt har konto, saldoer, summer og posteringer. Hver Ntry gir en CSV-rad per TxDtls, eller en rad fra Ntry hvis detaljer mangler. Saldoer, summer og batchinformasjon videreføres ikke.</desc>
+  <rect width="1000" height="850" fill="#ffffff"/>
+  <g font-family="Helvetica, Arial, sans-serif">
+    <text x="30" y="35" font-size="23" font-weight="bold" fill="#17324d">CAMT.053: fra kontoutskrift til CSV</text>
+    <text x="30" y="59" font-size="14" fill="#46586b">Forenklet leseguide til CAMT053_LOAD i BefExtract.groovy</text>
+    <g stroke="#6b8195" stroke-width="2" fill="none">
+      <path d="M500 130 V153"/>
+      <path d="M500 211 V233 H242 V252 M500 233 H739 V252"/>
+      <path d="M739 330 V352 H130 V375 M380 352 V375 M625 352 V375 M739 352 H870 V375"/>
+      <path d="M870 465 V490 H775 V515 M870 490 H940 V515 M775 490 H285 V515"/>
+      <path d="M775 625 V665 M940 605 V645 H890 V665"/>
+    </g>
+    <rect x="310" y="79" width="380" height="51" rx="8" fill="#17324d"/>
+    <text x="500" y="101" text-anchor="middle" font-size="17" font-weight="bold" fill="#ffffff">Document</text>
+    <text x="500" y="119" text-anchor="middle" font-size="12" fill="#ffffff">xmlns = ...:camt.053.001.02</text>
+    <rect x="310" y="153" width="380" height="58" rx="8" fill="#e7eef5" stroke="#8296aa"/>
+    <text x="500" y="178" text-anchor="middle" font-size="18" font-weight="bold" fill="#17324d">BkToCstmrStmt</text>
+    <text x="500" y="198" text-anchor="middle" font-size="13" fill="#17324d">Meldingen med kontoutskrifter</text>
+    <rect x="50" y="252" width="385" height="78" rx="8" fill="#e4f3f0" stroke="#468a7b"/>
+    <text x="70" y="278" font-size="18" font-weight="bold" fill="#155e50">GrpHdr</text>
+    <text x="70" y="300" font-size="14" fill="#17324d">Felles meldingshode og mottaker</text>
+    <text x="70" y="319" font-size="13" fill="#17324d">MsgRcpt / CUST-ID gir KUNDENUMMER</text>
+    <rect x="505" y="252" width="465" height="78" rx="8" fill="#e7eef5" stroke="#8296aa"/>
+    <text x="525" y="278" font-size="18" font-weight="bold" fill="#17324d">Stmt [flere per fil]</text>
+    <text x="525" y="300" font-size="14" fill="#17324d">Kontoutskrift med ID, periode og konto</text>
+    <text x="525" y="319" font-size="13" fill="#17324d">19 kontoutskrifter i den lokale filen</text>
+    <rect x="30" y="375" width="200" height="90" rx="8" fill="#e4f3f0" stroke="#468a7b"/>
+    <text x="45" y="402" font-size="18" font-weight="bold" fill="#155e50">Acct</text>
+    <text x="45" y="425" font-size="13" fill="#17324d">IBAN, Ccy, Ownr, Svcr</text>
+    <text x="45" y="448" font-size="12" fill="#155e50">Konto og reservevaluta</text>
+    <rect x="255" y="375" width="250" height="90" rx="8" fill="#f3f4f6" stroke="#9ba4ae"/>
+    <text x="270" y="402" font-size="18" font-weight="bold" fill="#46586b">Bal [flere]</text>
+    <text x="270" y="425" font-size="13" fill="#46586b">Inngående / utgående saldo</text>
+    <text x="270" y="448" font-size="12" fill="#46586b">Ikke videreført til CSV</text>
+    <rect x="525" y="375" width="200" height="90" rx="8" fill="#f3f4f6" stroke="#9ba4ae"/>
+    <text x="540" y="402" font-size="18" font-weight="bold" fill="#46586b">TxsSummry</text>
+    <text x="540" y="425" font-size="13" fill="#46586b">Antall og summer</text>
+    <text x="540" y="448" font-size="12" fill="#46586b">Ikke kontrollert</text>
+    <rect x="745" y="375" width="225" height="90" rx="8" fill="#e7eef5" stroke="#8296aa"/>
+    <text x="760" y="402" font-size="18" font-weight="bold" fill="#17324d">Ntry [0..n]</text>
+    <text x="760" y="425" font-size="13" fill="#17324d">Beløp, retning og dato</text>
+    <text x="760" y="448" font-size="12" fill="#17324d">Referanse og bankkoder</text>
+    <rect x="30" y="515" width="510" height="110" rx="8" fill="#fff5df" stroke="#b48b2d"/>
+    <text x="50" y="541" font-size="17" font-weight="bold" fill="#6c5012">NtryDtls / Btch</text>
+    <text x="50" y="564" font-size="14" fill="#17324d">Batchreferanser, antall betalinger og totalbeløp</text>
+    <text x="50" y="586" font-size="14" fill="#17324d">Dagens script bruker ikke disse feltene.</text>
+    <text x="50" y="608" font-size="13" fill="#6c5012">En batch uten TxDtls gir bare én rad fra Ntry.</text>
+    <rect x="565" y="515" width="325" height="110" rx="8" fill="#e4f3f0" stroke="#468a7b"/>
+    <text x="580" y="541" font-size="17" font-weight="bold" fill="#155e50">NtryDtls / TxDtls [0..n]</text>
+    <text x="580" y="564" font-size="13" fill="#17324d">Refs, AmtDtls, RltdPties</text>
+    <text x="580" y="586" font-size="13" fill="#17324d">RmtInf / Ustrd gir meldingstekst</text>
+    <text x="580" y="608" font-size="12" fill="#155e50">Én CSV-rad per detalj</text>
+    <rect x="905" y="515" width="70" height="90" rx="8" fill="#fff5df" stroke="#b48b2d"/>
+    <text x="940" y="540" text-anchor="middle" font-size="12" fill="#6c5012">Ingen</text>
+    <text x="940" y="558" text-anchor="middle" font-size="12" fill="#6c5012">TxDtls?</text>
+    <text x="940" y="584" text-anchor="middle" font-size="12" fill="#6c5012">Bruk Ntry</text>
+    <rect x="30" y="665" width="940" height="104" rx="8" fill="#17324d"/>
+    <text x="50" y="692" font-size="20" font-weight="bold" fill="#ffffff">CSV til EPM Account Reconciliation</text>
+    <text x="50" y="716" font-size="14" fill="#ffffff">Kunde, konto, valuta, bokføringsdato, beløp i øre og beløp</text>
+    <text x="50" y="739" font-size="14" fill="#ffffff">content1 = referanse | content2 = tekst | content3 = motpart | content4 = bankkoder</text>
+    <text x="50" y="758" font-size="13" fill="#ffffff">content5 er alltid tomt. Den lokale XML-filen gir 1 902 datarader.</text>
+    <text x="30" y="802" font-size="13" fill="#46586b">Grønt: felter som brukes i uttrekket. Grått: informasjon som ikke videreføres eller kontrolleres.</text>
+    <text x="30" y="823" font-size="13" fill="#46586b">Alle nodeantall er en leseguide, ikke et komplett XSD-skjema. Se veiledningen for reservevalg.</text>
+  </g>
+</svg>

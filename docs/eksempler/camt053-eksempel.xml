@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr>
+      <MsgId>DEMO-MSG-001</MsgId>
+      <CreDtTm>2026-06-04T02:00:00+02:00</CreDtTm>
+      <MsgRcpt>
+        <Nm>Eksempel kontoeier</Nm>
+        <Id><OrgId><Othr><Id>00000000000</Id><SchmeNm><Cd>CUST</Cd></SchmeNm></Othr></OrgId></Id>
+      </MsgRcpt>
+    </GrpHdr>
+    <Stmt>
+      <Id>DEMO-STMT-001</Id>
+      <CreDtTm>2026-06-04T02:00:00+02:00</CreDtTm>
+      <FrToDt>
+        <FrDtTm>2026-06-03T00:00:00+02:00</FrDtTm>
+        <ToDtTm>2026-06-03T23:59:59+02:00</ToDtTm>
+      </FrToDt>
+      <Acct>
+        <Id><IBAN>NO0011111111111</IBAN></Id>
+        <Ccy>NOK</Ccy>
+        <Ownr><Nm>Eksempel kontoeier</Nm></Ownr>
+      </Acct>
+      <Ntry>
+        <NtryRef>DEMO-NTRY-001</NtryRef>
+        <Amt Ccy="NOK">1250.50</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <RvslInd>false</RvslInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-06-03</Dt></BookgDt>
+        <ValDt><Dt>2026-06-04</Dt></ValDt>
+        <BkTxCd>
+          <Domn><Cd>PMNT</Cd><Fmly><Cd>RCDT</Cd><SubFmlyCd>DMCT</SubFmlyCd></Fmly></Domn>
+          <Prtry><Cd>Innbetaling</Cd></Prtry>
+        </BkTxCd>
+        <NtryDtls>
+          <TxDtls>
+            <Refs><ClrSysRef>DEMO-CLR-001</ClrSysRef><EndToEndId>DEMO-E2E-001</EndToEndId></Refs>
+            <AmtDtls><TxAmt><Amt Ccy="NOK">1250.50</Amt></TxAmt></AmtDtls>
+            <RltdPties><Dbtr><Nm>Eksempel betaler AS</Nm></Dbtr></RltdPties>
+            <RmtInf><Ustrd>Faktura DEMO-1001</Ustrd></RmtInf>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>DEMO-NTRY-002</NtryRef>
+        <Amt Ccy="NOK">300.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-06-03</Dt></BookgDt>
+        <BkTxCd>
+          <Domn><Cd>PMNT</Cd><Fmly><Cd>ICDT</Cd><SubFmlyCd>DMCT</SubFmlyCd></Fmly></Domn>
+          <Prtry><Cd>Utbetaling</Cd></Prtry>
+        </BkTxCd>
+        <NtryDtls>
+          <TxDtls>
+            <Refs><EndToEndId>DEMO-E2E-002</EndToEndId></Refs>
+            <AmtDtls><TxAmt><Amt Ccy="NOK">200.25</Amt></TxAmt></AmtDtls>
+            <RltdPties><Cdtr><Nm>Eksempel leverandor AS</Nm></Cdtr></RltdPties>
+            <RmtInf>
+              <Strd>
+                <CdtrRefInf>
+                  <Tp><CdOrPrtry><Cd>SCOR</Cd></CdOrPrtry></Tp>
+                  <Ref>DEMO-STRUKTURERT-001</Ref>
+                </CdtrRefInf>
+              </Strd>
+            </RmtInf>
+          </TxDtls>
+          <TxDtls>
+            <Refs><TxId>DEMO-TX-003</TxId></Refs>
+            <AmtDtls><TxAmt><Amt Ccy="NOK">99.75</Amt></TxAmt></AmtDtls>
+            <RltdPties><Cdtr><Nm>Eksempel mottaker AS</Nm></Cdtr></RltdPties>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>DEMO-NTRY-003</NtryRef>
+        <Amt Ccy="NOK">500.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-06-03</Dt></BookgDt>
+        <BkTxCd>
+          <Domn><Cd>PMNT</Cd><Fmly><Cd>ICDT</Cd><SubFmlyCd>SALA</SubFmlyCd></Fmly></Domn>
+          <Prtry><Cd>Samlebetaling</Cd></Prtry>
+        </BkTxCd>
+        <NtryDtls>
+          <Btch>
+            <MsgId>DEMO-BATCH-001</MsgId>
+            <PmtInfId>DEMO-GROUP-001</PmtInfId>
+            <NbOfTxs>3</NbOfTxs>
+            <TtlAmt Ccy="NOK">500.00</TtlAmt>
+            <CdtDbtInd>DBIT</CdtDbtInd>
+          </Btch>
+        </NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>DEMO-NTRY-004</NtryRef>
+        <Amt Ccy="NOK">2000.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-06-03</Dt></BookgDt>
+        <BkTxCd>
+          <Domn><Cd>PMNT</Cd><Fmly><Cd>ICDT</Cd><SubFmlyCd>DMCT</SubFmlyCd></Fmly></Domn>
+          <Prtry><Cd>Overforing</Cd></Prtry>
+        </BkTxCd>
+        <NtryDtls>
+          <TxDtls>
+            <Refs><ClrSysRef>DEMO-CLR-004</ClrSysRef></Refs>
+            <AmtDtls><TxAmt><Amt Ccy="NOK">2000.00</Amt></TxAmt></AmtDtls>
+            <RltdPties>
+              <DbtrAcct><Id><IBAN>NO0022222222222</IBAN></Id></DbtrAcct>
+              <Cdtr><Nm>Norges Bank</Nm></Cdtr>
+            </RltdPties>
+            <RmtInf><Ustrd>OVERF. NORGES BANK</Ustrd></RmtInf>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

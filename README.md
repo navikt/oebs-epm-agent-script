@@ -46,6 +46,7 @@ Kjør fra riktig miljømappe.
 ## Regler: input, matching, outputformat
 
 ### 1. `CAMT053_LOAD`
+- **Feltveiledning:** [XML-struktur, feltkoblinger og outputeksempler](docs/CAMT053.md) · [PDF](docs/CAMT053.pdf).
 - **Inputmappe:** `inbox/bank/camt053/`
 - **Arkivmappe:** `inbox/bank/camt053/arkiv/`
 - **Filmatching:** XML-filer der innhold/namespace inneholder `camt.053`
